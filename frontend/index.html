@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ENTITY GRID</title>
+<style>
+:root{
+  --bg:#080a0f; --bg2:#0b0e15; --surf:#0f131c; --surf2:#141926;
+  --line:#1c2231; --line2:#262d3f;
+  --ink:#e7eaf2; --mid:#98a1b6; --dim:#5f6982;
+  --accent:#3b6dfa; --accent2:#6b93ff;
+  --crit:#ff5c5c; --high:#e0932f; --ok:#39c07a;
+  --mono:"SF Mono",Consolas,"Roboto Mono",ui-monospace,monospace;
+  --disp:"Arial Narrow","Helvetica Neue Condensed",Impact,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 "Segoe UI",-apple-system,Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(900px 500px at 78% -8%,rgba(59,109,250,.09),transparent 60%);}
+
+/* ---------- boot ---------- */
+#boot{position:fixed;inset:0;z-index:99;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:opacity .5s ease}
+#boot.done{opacity:0;pointer-events:none}
+#boot .n{font:700 108px/1 var(--disp);letter-spacing:-.02em}
+#boot .n i{color:var(--accent);font-style:normal;font-size:52px;vertical-align:super}
+#boot .bar{width:290px;height:1px;background:var(--line2);margin:22px 0 16px;position:relative}
+#boot .bar i{position:absolute;inset:0 auto 0 0;background:var(--accent);width:0%}
+#boot .st{font:11px var(--mono);letter-spacing:.22em;color:var(--dim);text-transform:uppercase}
+
+/* ---------- nav ---------- */
+nav{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:40;
+  display:flex;align-items:center;gap:3px;padding:6px;
+  background:rgba(15,19,28,.82);backdrop-filter:blur(14px);
+  border:1px solid var(--line2);border-radius:999px;
+  box-shadow:0 10px 40px rgba(0,0,0,.55)}
+nav .brand{font:700 15px/1 var(--disp);letter-spacing:.13em;padding:0 14px 0 12px;
+  text-transform:uppercase;white-space:nowrap}
+nav .brand i{color:var(--accent);font-style:normal}
+nav button{background:none;border:0;color:var(--mid);cursor:pointer;
+  padding:8px 15px;border-radius:999px;font-size:13px;white-space:nowrap;
+  transition:background .15s,color .15s}
+nav button:hover{color:var(--ink);background:rgba(255,255,255,.05)}
+nav button.on{color:#fff;background:var(--accent)}
+
+/* ---------- layout ---------- */
+main{position:relative;z-index:1;max-width:1320px;margin:0 auto;padding:104px 30px 90px}
+section{display:none;animation:in .32s ease both}
+section.on{display:block}
+@keyframes in{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+
+.head{display:flex;align-items:flex-end;gap:18px;margin:0 0 6px}
+.head .idx{font:700 62px/.8 var(--disp);color:var(--line2);letter-spacing:-.02em}
+.head h2{margin:0;font:700 34px/1 var(--disp);letter-spacing:.03em;text-transform:uppercase}
+.lede{color:var(--mid);max-width:82ch;margin:12px 0 26px;font-size:14.5px}
+.lede b{color:var(--ink);font-weight:600}
+h3.sub{font:600 11px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dim);margin:34px 0 14px;display:flex;align-items:center;gap:12px}
+h3.sub::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* ---------- metrics ---------- */
+.metrics{display:grid;gap:1px;background:var(--line);
+  grid-template-columns:repeat(auto-fit,minmax(212px,1fr));
+  border:1px solid var(--line)}
+.metric{background:var(--bg2);padding:20px 20px 18px;position:relative}
+.metric .k{font:600 10.5px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+.metric .v{font:700 46px/1 var(--disp);margin:14px 0 6px;letter-spacing:-.01em}
+.metric .v small{font-size:22px;color:var(--mid)}
+.metric .s{font-size:12.5px;color:var(--mid);line-height:1.45}
+.metric .delta{font:600 11px var(--mono);color:var(--ok)}
+.c-accent{color:var(--accent2)} .c-ok{color:var(--ok)}
+.c-crit{color:var(--crit)} .c-high{color:var(--high)}
+
+/* ---------- panels ---------- */
+.panel{border:1px solid var(--line);background:var(--bg2)}
+.panel .ph{display:flex;align-items:center;gap:12px;padding:13px 16px;
+  border-bottom:1px solid var(--line);background:var(--surf)}
+.panel .ph b{font:600 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase}
+.panel .ph span{margin-left:auto;font:11px var(--mono);color:var(--dim)}
+.scroll{max-height:520px;overflow:auto}
+
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+thead th{position:sticky;top:0;background:var(--surf);z-index:2;
+  text-align:left;padding:10px 13px;border-bottom:1px solid var(--line2);
+  font:600 10.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+  cursor:pointer;user-select:none;white-space:nowrap}
+thead th:hover{color:var(--ink)}
+thead th.srt::after{content:" ▾";color:var(--accent)}
+thead th.srt.asc::after{content:" ▴"}
+tbody td{padding:10px 13px;border-bottom:1px solid #141926}
+tbody tr{cursor:pointer;transition:background .12s}
+tbody tr:hover{background:var(--surf2)}
+td.n{font-family:var(--mono);text-align:right;font-size:12.5px}
+td.id{font-family:var(--mono);font-size:12.5px;color:var(--accent2)}
+
+.tag{display:inline-block;padding:2px 8px;font:600 10px var(--mono);
+  letter-spacing:.1em;text-transform:uppercase;border:1px solid}
+.t-critical{color:var(--crit);border-color:#4a1f22;background:#1b0f12}
+.t-high{color:var(--high);border-color:#453113;background:#1a1409}
+.t-watch{color:var(--accent2);border-color:#1e2f5c;background:#0d1424}
+.t-normal{color:var(--dim);border-color:var(--line2);background:transparent}
+
+.mbar{height:4px;background:#151a26;min-width:64px;position:relative}
+.mbar i{position:absolute;inset:0 auto 0 0;background:var(--accent)}
+
+/* ---------- cards ---------- */
+.cards{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
+.evt{background:var(--bg2);padding:17px 18px;transition:background .15s}
+.evt:hover{background:var(--surf)}
+.evt .top{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.evt .top b{font:700 17px/1 var(--disp);letter-spacing:.06em}
+.evt .top time{margin-left:auto;font:11px var(--mono);color:var(--dim)}
+.evt p{margin:0;color:var(--mid);font-size:13px;line-height:1.55}
+.kv{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:12px;
+  font:11.5px var(--mono);color:var(--dim)}
+.kv b{color:var(--ink);font-weight:600}
+
+/* ---------- map ---------- */
+.mapwrap{border:1px solid var(--line);background:var(--bg2);position:relative}
+.maptools{display:flex;gap:6px;align-items:center;padding:11px 14px;
+  border-bottom:1px solid var(--line);background:var(--surf);flex-wrap:wrap}
+.maptools label{font:10.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim);margin-right:4px}
+.chip{padding:5px 12px;border:1px solid var(--line2);background:transparent;
+  color:var(--mid);font:11px var(--mono);cursor:pointer;letter-spacing:.06em}
+.chip:hover{color:var(--ink);border-color:var(--dim)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+#map{display:block;width:100%;height:auto}
+#map .dt{cursor:pointer}
+#map .mtr{cursor:pointer;transition:r .12s}
+#tip{position:fixed;z-index:60;pointer-events:none;opacity:0;transition:opacity .12s;
+  background:rgba(10,13,20,.97);border:1px solid var(--line2);padding:9px 12px;
+  font:11.5px/1.6 var(--mono);color:var(--ink);max-width:290px;
+  box-shadow:0 8px 30px rgba(0,0,0,.6)}
+#tip b{color:var(--accent2)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;padding:11px 14px;border-top:1px solid var(--line);
+  font:11px var(--mono);color:var(--dim)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;
+  vertical-align:middle}
+
+/* ---------- drawer ---------- */
+#scrim{position:fixed;inset:0;background:rgba(4,6,10,.72);z-index:70;opacity:0;
+  pointer-events:none;transition:opacity .25s}
+#scrim.on{opacity:1;pointer-events:auto}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(760px,94vw);z-index:80;
+  background:var(--bg2);border-left:1px solid var(--line2);overflow-y:auto;
+  transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+  box-shadow:-24px 0 70px rgba(0,0,0,.6)}
+#drawer.on{transform:none}
+.dh{position:sticky;top:0;background:var(--surf);border-bottom:1px solid var(--line2);
+  padding:18px 24px;display:flex;align-items:center;gap:14px;z-index:5}
+.dh h3{margin:0;font:700 30px/1 var(--disp);letter-spacing:.05em}
+.dh .x{margin-left:auto;background:none;border:1px solid var(--line2);color:var(--mid);
+  width:32px;height:32px;cursor:pointer;font-size:16px}
+.dh .x:hover{color:var(--ink);border-color:var(--dim)}
+.db{padding:22px 24px 60px}
+.chart{margin-bottom:8px}
+.chart .ct{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.chart .ct b{font:600 10.5px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.chart .ct span{margin-left:auto;font:11px var(--mono);color:var(--dim)}
+input[type=range]{width:100%;accent-color:var(--accent);background:transparent}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);margin-bottom:20px}
+.stat3 div{background:var(--bg2);padding:12px 14px}
+.stat3 .k{font:10px var(--mono);letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+.stat3 .v{font:700 24px/1.2 var(--disp);margin-top:5px}
+
+.search{background:var(--surf);border:1px solid var(--line2);color:var(--ink);
+  padding:7px 12px;font:12px var(--mono);width:230px}
+.search:focus{outline:0;border-color:var(--accent)}
+.empty{padding:40px;text-align:center;color:var(--dim);font:12px var(--mono)}
+.foot{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);
+  font:11px var(--mono);color:var(--dim);display:flex;gap:24px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <div class="n"><span id="bn">0</span><i>%</i></div>
+  <div class="bar"><i id="bb"></i></div>
+  <div class="st" id="bs">initialising</div>
+</div>
+
+<nav id="nav"><span class="brand">ENTITY<i>GRID</i></span></nav>
+
+<main>
+  <section id="s-overview" class="on">
+    <div class="head"><span class="idx">01</span><h2>Scorecard</h2></div>
+    <p class="lede">Every number here is graded against a simulated distribution network
+      whose true connectivity, degradation and faults are known exactly. <b>No model reads
+      that truth</b>, it exists only to mark the answers. The inputs are what an Indian
+      DISCOM already owns today: smart-meter voltage, transformer telemetry, last-gasp
+      messages, and a connectivity ledger that is wrong about a third of the time.</p>
+    <div class="metrics" id="metrics"></div>
+    <h3 class="sub">Four pillars</h3>
+    <div class="cards" id="pillars"></div>
+    <h3 class="sub">What the system is not certain about</h3>
+    <div class="cards" id="limits"></div>
+    <div class="foot" id="foot"></div>
+  </section>
+
+  <section id="s-map">
+    <div class="head"><span class="idx">02</span><h2>Learned Network</h2></div>
+    <p class="lede">Impedance space, not a map. Each transformer is a hub; every consumer is
+      placed by the phase it was <b>found</b> on and its estimated electrical depth. No GIS
+      was used, because no DISCOM has usable LV GIS. Hover any node for detail, click a
+      transformer to open it.</p>
+    <div class="mapwrap">
+      <div class="maptools">
+        <label>Colour</label>
+        <button class="chip on" data-mode="phase">Phase</button>
+        <button class="chip" data-mode="confidence">Confidence</button>
+        <button class="chip" data-mode="corrected">Ledger errors</button>
+        <button class="chip" data-mode="risk">Transformer risk</button>
+        <input class="search" id="mapsearch" placeholder="find meter id…" style="margin-left:auto">
+      </div>
+      <svg id="map" viewBox="0 0 1240 690" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend" id="maplegend"></div>
+    </div>
+  </section>
+
+  <section id="s-fleet">
+    <div class="head"><span class="idx">03</span><h2>Fleet</h2></div>
+    <p class="lede">Twelve transformers ranked by condition. Loading, unbalance and
+      worst-served voltage are all computed against the connectivity ENTITY GRID learned. Using the utility's own ledger would misattribute roughly one consumer in three.
+      <b>Click any row</b> for the full condition history.</p>
+    <div class="panel">
+      <div class="ph"><b>Transformer fleet</b><span id="fleetn"></span></div>
+      <div class="scroll"><table id="fleet"></table></div>
+    </div>
+  </section>
+
+  <section id="s-alerts">
+    <div class="head"><span class="idx">04</span><h2>Predictive Alerts</h2></div>
+    <p class="lede">Impedance drift measured against each asset's own baseline, never a
+      fleet-wide threshold. A 63 kVA rural unit and a 250 kVA urban one have nothing in
+      common. Segment alerts group meters degrading <b>together</b>, because three
+      neighbours failing in step is one bad joint upstream, not three coincidences.</p>
+    <h3 class="sub">Transformer level</h3>
+    <div class="cards" id="alerts-dt"></div>
+    <h3 class="sub">Segment level, the actual work orders</h3>
+    <div class="cards" id="alerts-seg"></div>
+  </section>
+
+  <section id="s-faults">
+    <div class="head"><span class="idx">05</span><h2>Fault Location</h2></div>
+    <p class="lede">A last-gasp burst says <i>something</i> broke. This says <b>where</b>:
+      the fault sits below every dark meter and above every lit one, which brackets it to a
+      span of line measured in ohms from the transformer. That bracket is what a crew walks
+      instead of the whole feeder.</p>
+    <div class="cards" id="faults"></div>
+  </section>
+
+  <section id="s-topology">
+    <div class="head"><span class="idx">06</span><h2>Ledger Corrections</h2></div>
+    <p class="lede">Every row is a consumer the utility has booked against the wrong
+      transformer or the wrong phase. Found from voltage alone, with no site visit.
+      Billing, loss accounting, outage response and load balancing all inherit these errors
+      today.</p>
+    <div class="panel">
+      <div class="ph"><b>Disagreements with the utility record</b>
+        <input class="search" id="corrsearch" placeholder="filter…" style="margin-left:auto">
+        <span id="corrn"></span></div>
+      <div class="scroll"><table id="corr"></table></div>
+    </div>
+  </section>
+
+  <section id="s-voltage">
+    <div class="head"><span class="idx">07</span><h2>Solar &amp; Voltage</h2></div>
+    <p class="lede">Rooftop PV reverses power flow at midday on feeders built to move it one
+      way. The rise trips inverters and ages transformers. Excursions coincident with export
+      are separated from ordinary load-driven sag, and reactive setpoints go to the
+      inverters <b>deepest</b> on the affected phase, where each kvar buys the most volts.
+      Curtailment is a last resort. It costs the customer generation.</p>
+    <div class="metrics" id="vmetrics"></div>
+    <h3 class="sub">Excursions</h3>
+    <div class="panel">
+      <div class="ph"><b>Sustained limit violations</b><span>±6% of 230 V, CEA limits</span></div>
+      <div class="scroll"><table id="exc"></table></div>
+    </div>
+    <h3 class="sub">Issued volt-var setpoints</h3>
+    <div class="panel"><div class="scroll"><table id="sp"></table></div></div>
+  </section>
+</main>
+
+<div id="tip"></div>
+<div id="scrim"></div>
+<aside id="drawer"><div class="dh"><h3 id="dtitle"></h3>
+  <button class="x" id="dclose">✕</button></div>
+  <div class="db" id="dbody"></div></aside>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const get=u=>fetch(u).then(r=>r.ok?r.json():Promise.reject(r.status));
+const N=(v,d=2)=>v==null||Number.isNaN(v)?"":Number(v).toFixed(d);
+const P=v=>v==null?"":(v*100).toFixed(1)+"%";
+const E=s=>String(s??"").replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+const PH=["R","Y","B"], PHC=["#3b6dfa","#e0932f","#39c07a"];
+const tag=s=>`<span class="tag t-${s||"normal"}">${s||"normal"}</span>`;
+let DATA={};
+
+/* ---------------- boot ---------------- */
+const BOOT=["reading ami head-end","removing common mode","clustering 486 meters",
+            "matching busbar signatures","estimating impedances","scoring against truth"];
+function boot(){
+  let p=0,i=0;
+  const t=setInterval(()=>{
+    p=Math.min(100,p+Math.random()*13+4);
+    $("#bn").textContent=Math.floor(p);
+    $("#bb").style.width=p+"%";
+    const k=Math.min(BOOT.length-1,Math.floor(p/100*BOOT.length));
+    if(k!==i){i=k;$("#bs").textContent=BOOT[k];}
+    if(p>=100){clearInterval(t);setTimeout(()=>$("#boot").classList.add("done"),260);}
+  },130);
+}
+
+/* ---------------- nav ---------------- */
+const TABS=[["overview","Scorecard"],["map","Network"],["fleet","Fleet"],
+            ["alerts","Alerts"],["faults","Faults"],["topology","Ledger"],["voltage","Solar"]];
+TABS.forEach(([id,label],i)=>{
+  const b=document.createElement("button");
+  b.textContent=label; if(!i)b.classList.add("on");
+  b.onclick=()=>{$$("nav button").forEach(x=>x.classList.remove("on"));
+    $$("section").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); $("#s-"+id).classList.add("on");
+    window.scrollTo({top:0,behavior:"instant"});};
+  $("#nav").appendChild(b);
+});
+
+/* ---------------- sortable table ---------------- */
+function mkTable(el,cols,rows,onRow){
+  let sortKey=null,asc=false;
+  function draw(){
+    let r=[...rows];
+    if(sortKey){const c=cols.find(c=>c.k===sortKey);
+      r.sort((a,b)=>{const x=c.sv?c.sv(a):a[sortKey],y=c.sv?c.sv(b):b[sortKey];
+        if(x==null)return 1; if(y==null)return -1;
+        return (typeof x==="number"?x-y:String(x).localeCompare(String(y)))*(asc?1:-1);});}
+    el.innerHTML="<thead><tr>"+cols.map(c=>
+      `<th data-k="${c.k}" class="${sortKey===c.k?"srt "+(asc?"asc":""):""}">${c.h}</th>`).join("")
+      +"</tr></thead><tbody>"+(r.length?r.map((row,i)=>
+      `<tr data-i="${i}">`+cols.map(c=>`<td class="${c.c||""}">${c.f?c.f(row):(row[c.k]??"")}</td>`).join("")
+      +"</tr>").join(""):`<tr><td class="empty" colspan="${cols.length}">nothing to show</td></tr>`)
+      +"</tbody>";
+    el.querySelectorAll("th").forEach(th=>th.onclick=()=>{
+      const k=th.dataset.k; asc=(sortKey===k)?!asc:false; sortKey=k; draw();});
+    if(onRow)el.querySelectorAll("tbody tr[data-i]").forEach(tr=>
+      tr.onclick=()=>onRow(r[+tr.dataset.i]));
+  }
+  draw(); return {redraw:(nr)=>{rows=nr;draw();}};
+}
+
+/* ---------------- svg line chart ---------------- */
+function chart(series,opts={}){
+  const W=700,H=opts.h||150,L=46,R=10,T=10,B=20;
+  const all=series.flatMap(s=>s.v).filter(v=>v!=null&&isFinite(v));
+  if(!all.length)return `<div class="empty">no data</div>`;
+  let lo=opts.lo??Math.min(...all), hi=opts.hi??Math.max(...all);
+  if(hi-lo<1e-9){hi+=1;lo-=1;}
+  const pad=(hi-lo)*.12; lo-=pad; hi+=pad;
+  const n=Math.max(...series.map(s=>s.v.length));
+  const X=i=>L+(W-L-R)*(n<2?0:i/(n-1));
+  const Y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
+  const path=s=>{let d="",up=true;
+    s.v.forEach((v,i)=>{ if(v==null||!isFinite(v)){up=true;return;}
+      d+=(up?"M":"L")+X(i).toFixed(1)+" "+Y(v).toFixed(1)+" "; up=false;});
+    return d;};
+  const grid=[0,.25,.5,.75,1].map(f=>{const v=lo+(hi-lo)*f;
+    return `<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="#1c2231"/>
+      <text x="${L-7}" y="${Y(v)+3.5}" text-anchor="end" fill="#5f6982"
+        font-family="var(--mono)" font-size="9.5">${v.toFixed(opts.dp??0)}</text>`;}).join("");
+  const bands=(opts.bands||[]).map(b=>
+    `<rect x="${L}" y="${Y(b.hi)}" width="${W-L-R}" height="${Math.abs(Y(b.lo)-Y(b.hi))}"
+      fill="${b.c}" opacity=".07"/>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${bands}${grid}
+    ${series.map(s=>`<path d="${path(s)}" fill="none" stroke="${s.c}"
+      stroke-width="${s.w||1.4}" stroke-linejoin="round"/>`).join("")}
+    ${(opts.marks||[]).map(m=>`<line x1="${X(m.i)}" x2="${X(m.i)}" y1="${T}" y2="${H-B}"
+      stroke="${m.c}" stroke-dasharray="3 3" stroke-width="1"/>`).join("")}</svg>`;
+}
+const legendDots=s=>s.map(x=>
+  `<span style="color:${x.c};font:11px var(--mono)">■ ${x.n}</span>`).join(" &nbsp; ");
+
+/* ---------------- drawer ---------------- */
+function closeDrawer(){$("#drawer").classList.remove("on");$("#scrim").classList.remove("on");}
+$("#dclose").onclick=closeDrawer; $("#scrim").onclick=closeDrawer;
+addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();});
+
+async function openDT(dtId){
+  $("#dtitle").textContent=dtId;
+  $("#dbody").innerHTML=`<div class="empty">loading ${dtId}…</div>`;
+  $("#drawer").classList.add("on"); $("#scrim").classList.add("on");
+  const [d,ser]=await Promise.all([
+    get(`/api/transformer/${dtId}`), get(`/api/transformer/${dtId}/series?day=20`)]);
+  const f=d.features, last=f[f.length-1]||{};
+  const days=f.map(r=>r.day);
+
+  const impSeries=[
+    {n:"neutral",c:"#3b6dfa",v:f.map(r=>r.neutral_impedance)},
+    {n:"feeder",c:"#e0932f",v:f.map(r=>r.feeder_impedance)},
+  ];
+  const segs=d.segments||[];
+  const marks=segs.map(s=>({i:days.indexOf(s.onset_day),c:"#ff5c5c"})).filter(m=>m.i>=0);
+
+  $("#dbody").innerHTML=`
+    <div class="stat3">
+      <div><div class="k">Loading</div><div class="v">${N(last.loading_pct,1)}<small>%</small></div></div>
+      <div><div class="k">Unbalance</div><div class="v">${N(last.voltage_unbalance_pct,2)}<small>%</small></div></div>
+      <div><div class="k">Worst volt</div><div class="v">${N(last.min_meter_voltage,1)}<small>V</small></div></div>
+    </div>
+    ${d.alerts.length||segs.length?`<h3 class="sub">Findings</h3>
+      ${d.alerts.map(a=>`<div class="evt" style="border:1px solid var(--line);margin-bottom:8px">
+        <div class="top"><b>${a.indicator.replace(/_/g," ")}</b>${tag(a.severity)}
+        <time>day ${a.day}</time></div><p>${E(a.evidence)}</p></div>`).join("")}
+      ${segs.map(s=>`<div class="evt" style="border:1px solid var(--line);margin-bottom:8px">
+        <div class="top"><b>segment · phase ${PH[s.phase]}</b>
+        <span class="tag t-high">${s.meters.length} meters</span><time>day ${s.onset_day}</time></div>
+        <p>${E(s.evidence)}</p><div class="kv">${s.meters.slice(0,8).map(m=>`<span>${m}</span>`).join("")}</div>
+        </div>`).join("")}`:""}
+
+    <h3 class="sub">Condition trend. Estimated impedance by day</h3>
+    <div class="chart"><div class="ct"><b>ohms</b><span>${legendDots(impSeries)} &nbsp; ⋮ segment onset</span></div>
+      ${chart(impSeries,{h:160,dp:3,marks})}</div>
+
+    <h3 class="sub">Busbar telemetry. Day 20</h3>
+    <div class="chart"><div class="ct"><b>voltage · V</b>
+      <span>${legendDots(PH.map((p,i)=>({n:p,c:PHC[i]})))}</span></div>
+      ${chart(PH.map((p,i)=>({n:p,c:PHC[i],v:ser.voltage.map(r=>r[i])})),
+        {h:150,dp:0,bands:[{lo:216.2,hi:243.8,c:"#39c07a"}]})}</div>
+    <div class="chart"><div class="ct"><b>current · A</b>
+      <span>phases + neutral</span></div>
+      ${chart([...PH.map((p,i)=>({n:p,c:PHC[i],v:ser.current.map(r=>r[i])})),
+        {n:"N",c:"#98a1b6",v:ser.neutral_current,w:1.1}],{h:140,dp:0})}</div>
+    <div id="dayrow" style="margin:6px 0 22px">
+      <div class="ct" style="display:flex"><b style="font:600 10.5px var(--mono);
+        letter-spacing:.16em;text-transform:uppercase;color:var(--dim)">day</b>
+        <span id="daylbl" style="margin-left:auto;font:11px var(--mono);color:var(--dim)">20</span></div>
+      <input type="range" id="dayslider" min="0" max="${Math.max(...days)}" value="20">
+    </div>
+
+    <h3 class="sub">Connected consumers, ${d.meters.length} found on this transformer</h3>
+    <div class="panel"><div class="scroll" style="max-height:280px">
+      <table><thead><tr><th>Meter</th><th>Phase</th><th>Confidence</th><th>Verify</th></tr></thead>
+      <tbody>${d.meters.map(m=>`<tr><td class="id">${m.meter_id}</td>
+        <td>${m.inferred_phase_name}</td><td class="n">${P(m.confidence)}</td>
+        <td>${String(m.needs_verification).toLowerCase()==="true"
+          ?'<span class="tag t-high">field check</span>':""}</td></tr>`).join("")}
+      </tbody></table></div></div>`;
+
+  const sl=$("#dayslider");
+  if(sl)sl.oninput=async()=>{
+    const day=+sl.value; $("#daylbl").textContent=day;
+    const s2=await get(`/api/transformer/${dtId}/series?day=${day}`);
+    $$("#dbody .chart")[1].innerHTML=`<div class="ct"><b>voltage · V</b>
+      <span>${legendDots(PH.map((p,i)=>({n:p,c:PHC[i]})))}</span></div>`+
+      chart(PH.map((p,i)=>({n:p,c:PHC[i],v:s2.voltage.map(r=>r[i])})),
+        {h:150,dp:0,bands:[{lo:216.2,hi:243.8,c:"#39c07a"}]});
+    $$("#dbody .chart")[2].innerHTML=`<div class="ct"><b>current · A</b><span>phases + neutral</span></div>`+
+      chart([...PH.map((p,i)=>({n:p,c:PHC[i],v:s2.current.map(r=>r[i])})),
+        {n:"N",c:"#98a1b6",v:s2.neutral_current,w:1.1}],{h:140,dp:0});
+  };
+}
+
+/* ---------------- network map ---------------- */
+let MAPMODE="phase";
+function drawMap(){
+  const g=DATA.graph, svg=$("#map");
+  const COLS=4,ROWS=3,CW=1240/COLS,CH=690/ROWS;
+  const byDT={}; g.meters.forEach(m=>(byDT[m.inferred_dt_id] ||= []).push(m));
+  let out="";
+  g.transformers.forEach((t,idx)=>{
+    const cx=CW*(idx%COLS)+CW/2, cy=CH*Math.floor(idx/COLS)+CH/2;
+    const ms=byDT[t.dt_id]||[];
+    const rMax=Math.min(CW,CH)/2-26;
+    // meters: angle by phase sector + index, radius by electrical depth
+    const perPhase=[[],[],[]]; ms.forEach(m=>perPhase[m.inferred_phase].push(m));
+    perPhase.forEach((list,ph)=>{
+      list.sort((a,b)=>(a.depth_rank??0)-(b.depth_rank??0));
+      list.forEach((m,i)=>{
+        const a=(ph*120-90+(i/Math.max(1,list.length-1)-0.5)*88)*Math.PI/180;
+        const r=22+rMax*(0.25+0.75*(m.depth_rank??0.5));
+        const x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r;
+        m._x=x;m._y=y;
+        let c=PHC[m.inferred_phase], rad=2.6;
+        if(MAPMODE==="confidence"){const v=m.confidence??0;
+          c=v>.6?"#39c07a":v>.4?"#e0932f":"#ff5c5c"; rad=2.6;}
+        if(MAPMODE==="corrected"){c=m.corrected?"#ff5c5c":"#243049"; rad=m.corrected?3.3:2.1;}
+        if(MAPMODE==="risk"){c=t.severity==="critical"?"#ff5c5c":
+          t.severity==="high"?"#e0932f":"#243049";}
+        out+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"
+          stroke="${c}" stroke-width=".5" opacity=".26"/>`;
+        out+=`<circle class="mtr" data-m="${m.meter_id}" cx="${x.toFixed(1)}"
+          cy="${y.toFixed(1)}" r="${rad}" fill="${c}"/>`;
+      });
+    });
+    const sc=t.severity==="critical"?"#ff5c5c":t.severity==="high"?"#e0932f":"#3b6dfa";
+    out+=`<g class="dt" data-dt="${t.dt_id}">
+      <circle cx="${cx}" cy="${cy}" r="17" fill="#0f131c" stroke="${sc}" stroke-width="1.6"/>
+      ${t.severity!=="normal"?`<circle cx="${cx}" cy="${cy}" r="17" fill="none"
+        stroke="${sc}" stroke-width="1.6" opacity=".45">
+        <animate attributeName="r" values="17;28;17" dur="2.4s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values=".45;0;.45" dur="2.4s" repeatCount="indefinite"/>
+        </circle>`:""}
+      <text x="${cx}" y="${cy+4}" text-anchor="middle" fill="#e7eaf2"
+        font-family="var(--mono)" font-size="10.5" font-weight="600">${t.dt_id.replace("DT","")}</text>
+      <text x="${cx}" y="${cy+rMax+20}" text-anchor="middle" fill="#5f6982"
+        font-family="var(--mono)" font-size="9.5">${t.dt_id} · ${t.n_meters}</text></g>`;
+  });
+  svg.innerHTML=out;
+
+  const tip=$("#tip");
+  svg.querySelectorAll(".mtr").forEach(el=>{
+    const m=g.meters.find(x=>x.meter_id===el.dataset.m);
+    el.onmousemove=ev=>{tip.style.opacity=1;
+      tip.style.left=Math.min(ev.clientX+14,innerWidth-300)+"px";
+      tip.style.top=(ev.clientY+14)+"px";
+      tip.innerHTML=`<b>${m.meter_id}</b><br>transformer ${m.inferred_dt_id} · phase
+        ${PH[m.inferred_phase]}<br>confidence ${P(m.confidence)}<br>depth
+        ${N(m.path_impedance_ohm,4)} Ω${m.corrected?'<br><span style="color:#ff5c5c">ledger was wrong</span>':""}`;};
+    el.onmouseleave=()=>tip.style.opacity=0;
+    el.onclick=()=>openDT(m.inferred_dt_id);
+  });
+  svg.querySelectorAll(".dt").forEach(el=>{
+    const t=g.transformers.find(x=>x.dt_id===el.dataset.dt);
+    el.onmousemove=ev=>{tip.style.opacity=1;
+      tip.style.left=Math.min(ev.clientX+14,innerWidth-300)+"px";
+      tip.style.top=(ev.clientY+14)+"px";
+      tip.innerHTML=`<b>${t.dt_id}</b><br>${t.n_meters} consumers · ${t.severity}
+        <br>loading ${N(t.loading_pct,1)}%<br>worst volt ${N(t.min_meter_voltage,1)} V
+        <br>${t.corrected} ledger errors found`;};
+    el.onmouseleave=()=>tip.style.opacity=0;
+    el.onclick=()=>openDT(t.dt_id);
+  });
+
+  const LG={phase:PH.map((p,i)=>[PHC[i],"phase "+p]),
+    confidence:[["#39c07a","high"],["#e0932f","medium"],["#ff5c5c","low. Verify"]],
+    corrected:[["#ff5c5c","ledger wrong"],["#243049","ledger correct"]],
+    risk:[["#ff5c5c","critical"],["#e0932f","high"],["#243049","normal"]]};
+  $("#maplegend").innerHTML=(LG[MAPMODE]||[]).map(([c,n])=>
+    `<span><i style="background:${c}"></i>${n}</span>`).join("")+
+    `<span style="margin-left:auto">radius = electrical depth from transformer</span>`;
+}
+$$(".chip[data-mode]").forEach(b=>b.onclick=()=>{
+  $$(".chip[data-mode]").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on"); MAPMODE=b.dataset.mode; drawMap();});
+$("#mapsearch").oninput=e=>{
+  const q=e.target.value.trim().toUpperCase();
+  $$("#map .mtr").forEach(el=>{
+    const hit=q&&el.dataset.m.includes(q);
+    el.setAttribute("r",hit?6:(MAPMODE==="corrected"?2.1:2.6));
+    el.style.filter=hit?"drop-shadow(0 0 7px #fff)":"";});
+};
+
+/* ---------------- render ---------------- */
+(async function(){
+  boot();
+  const [status,score,fleet,alerts,faults,corr,volt,graph]=await Promise.all([
+    get("/api/status"),get("/api/scorecard"),get("/api/fleet"),get("/api/alerts"),
+    get("/api/faults"),get("/api/topology/corrections?limit=400"),
+    get("/api/voltage?limit=250"),get("/api/network/graph")]);
+  DATA={graph};
+  const t=score.topology,h=score.health,f=score.faults,v=score.voltage,m=status.meta;
+
+  $("#metrics").innerHTML=[
+    {k:"Connectivity accuracy",v:(t.joint_accuracy*100).toFixed(1),u:"%",c:"c-ok",
+     s:`utility ledger reads ${P(t.ledger_joint_accuracy)}`,
+     d:`▲ ${((t.joint_accuracy-t.ledger_joint_accuracy)*100).toFixed(1)} points`},
+    {k:"Records corrected",v:t.corrections_found,u:"",c:"c-accent",
+     s:`of ${t.n_meters} consumers, from voltage alone. No site visit`},
+    {k:"Failing units caught",v:`${h.detected.length}/${h.degrading_transformers.length}`,u:"",
+     c:h.missed.length?"c-high":"c-ok",
+     s:`${h.false_positive_transformers.length} false alarms`,
+     d:`${N(h.mean_lead_days,0)} days mean warning`},
+    {k:"Faults located",v:`${f.detected}/${f.truth_events}`,u:"",c:"c-ok",
+     s:`precision ${P(f.mean_precision)} · recall ${P(f.mean_recall)}`,
+     d:`${N(f.median_detection_lag_s,0)}s from first message`},
+  ].map(x=>`<div class="metric"><div class="k">${x.k}</div>
+    <div class="v ${x.c}">${x.v}<small>${x.u||""}</small></div>
+    <div class="s">${x.s}${x.d?`<br><span class="delta">${x.d}</span>`:""}</div></div>`).join("");
+
+  $("#pillars").innerHTML=[
+    ["01","Self-learning topology",
+     "Meters are clustered on voltage increments after the shared substation swing is removed; each group is then matched to a transformer and phase against busbar telemetry. The natural grouping is the (transformer, phase) pair, because meters sharing a phase conductor share its voltage drop almost exactly.",
+     [["DT",P(t.dt_accuracy)],["phase",P(t.phase_accuracy)],["flagged",t.flagged_for_verification]]],
+    ["02","Predictive health",
+     "Impedance drift against each asset's own baseline, run at transformer level and again at segment level. The second pass exists because a joint with three consumers behind it moves the transformer average by nothing at all.",
+     [["found",h.detected.join(" ")||"none"],["missed",h.missed.join(" ")||"none"],["meters",h.meters_flagged]]],
+    ["03","Fault localisation",
+     "Last-gasp bursts are clustered per transformer and bracketed by electrical depth. Recall is bounded by the roughly 14% of last-gasp messages that never survive the RF collisions of a mass outage.",
+     [["events",f.detected],["lag",N(f.median_detection_lag_s,0)+"s"],["precision",P(f.mean_precision)]]],
+    ["04","Solar-aware voltage",
+     "Limit violations are split into reverse-flow driven and load driven, and reactive absorption is weighted toward the deepest inverters on the affected phase. Vars before curtailment, always.",
+     [["excursions",v.excursions],["reverse flow",v.reverse_flow_driven],["setpoints",v.setpoints_issued]]],
+  ].map(([n,ttl,body,kv])=>`<div class="evt"><div class="top">
+    <b style="color:var(--dim)">${n}</b><b>${ttl}</b></div><p>${body}</p>
+    <div class="kv">${kv.map(([a,b])=>`<span>${a} <b>${b}</b></span>`).join("")}</div></div>`).join("");
+
+  const un=h.unassessable_indicators||[];
+  $("#limits").innerHTML=`
+    <div class="evt"><div class="top"><b>${un.length}</b><b>unassessable indicators</b></div>
+      <p>Indicators whose day-to-day scatter exceeded their own signal are reported as
+      unmeasurable rather than quietly passed as healthy. Busbar-referenced winding
+      estimates fail this test on a feeder whose MV source drifts. The reference moves as
+      much as the asset does.</p>
+      <div class="kv">${[...new Set(un.map(u=>u.indicator))].map(i=>
+        `<span>${i.replace(/_/g," ")}</span>`).join("")}</div></div>
+    <div class="evt"><div class="top"><b>~14%</b><b>last-gasp loss ceiling</b></div>
+      <p>Fault recall cannot exceed the share of last-gasp messages that survive. Precision
+      is ${P(f.mean_precision)}, everything reported dark really was dark. But a meter whose
+      message was lost cannot be counted.</p></div>
+    <div class="evt"><div class="top"><b>2 days</b><b>cold-start requirement</b></div>
+      <p>Topology reaches full accuracy after roughly two days of interval data, and about
+      97% after one. Health trends need a seven-day baseline before any alert is credible.</p></div>
+    <div class="evt"><div class="top"><b>Synthetic</b><b>validation basis</b></div>
+      <p>These results come from a simulated network solved with a four-wire backward/forward
+      sweep, not a live DISCOM feed. The physics is genuine; field accuracy will be lower,
+      and the sensitivity sweep is in the repository for that reason.</p></div>`;
+
+  $("#foot").innerHTML=[`${m.meters} meters`,`${m.transformers} transformers`,
+    `${m.days} days @ 15 min`,`${m.start.slice(0,10)} → ${m.end.slice(0,10)}`,
+    "Yuva Yodha Energy Tech Hackathon 2026 · Grid Reliability"]
+    .map(s=>`<span>${s}</span>`).join("");
+
+  $("#fleetn").textContent=`${fleet.length} units · click a row`;
+  mkTable($("#fleet"),[
+    {k:"dt_id",h:"Unit",c:"id"},
+    {k:"severity",h:"State",f:r=>tag(r.severity)},
+    {k:"risk_score",h:"Risk",c:"n",f:r=>`<div class="mbar"><i style="width:${
+      Math.min(100,r.risk_score||0)}%;background:${r.risk_score>70?"var(--crit)":
+      r.risk_score>45?"var(--high)":"var(--accent)"}"></i></div>`},
+    {k:"indicator",h:"Driver",f:r=>r.indicator?String(r.indicator).replace(/_/g," "):""},
+    {k:"excess_pct",h:"Excess",c:"n",f:r=>r.excess_pct==null?"":N(r.excess_pct,1)+"%"},
+    {k:"days_to_failure",h:"Days left",c:"n",f:r=>r.days_to_failure==null?"":N(r.days_to_failure,1)},
+    {k:"loading_pct",h:"Load",c:"n",f:r=>N(r.loading_pct,1)+"%"},
+    {k:"voltage_unbalance_pct",h:"Unbal",c:"n",f:r=>N(r.voltage_unbalance_pct,2)+"%"},
+    {k:"min_meter_voltage",h:"Worst V",c:"n",f:r=>N(r.min_meter_voltage,1)},
+  ],fleet,r=>openDT(r.dt_id));
+
+  $("#alerts-dt").innerHTML=alerts.transformer.map(a=>`<div class="evt"
+    onclick="openDT('${a.dt_id}')"><div class="top"><b>${a.dt_id}</b>${tag(a.severity)}
+    <time>day ${a.day}</time></div><p>${E(a.evidence)}</p>
+    <div class="kv"><span>risk <b>${N(a.risk_score,0)}</b></span>
+    <span>to failure <b>${a.days_to_failure==null?"":N(a.days_to_failure,1)+" d"}</b></span>
+    <span>drift <b>${N(a.drift_per_day,5)} Ω/d</b></span></div></div>`).join("")
+    ||`<div class="evt"><p>none</p></div>`;
+
+  $("#alerts-seg").innerHTML=alerts.segment.map(s=>`<div class="evt"
+    onclick="openDT('${s.dt_id}')"><div class="top"><b>${s.dt_id} · ${PH[s.phase]}</b>
+    <span class="tag t-high">${s.meters.length} meters</span><time>day ${s.onset_day}</time></div>
+    <p>${E(s.evidence)}</p><div class="kv"><span>confidence <b>${P(s.confidence)}</b></span>
+    <span>drift <b>${N(s.drift_per_day,5)} Ω/d</b></span>
+    <span>${s.meters.slice(0,4).join(" ")}${s.meters.length>4?" …":""}</span></div></div>`).join("")
+    ||`<div class="evt"><p>none</p></div>`;
+
+  $("#faults").innerHTML=faults.map(x=>`<div class="evt" onclick="openDT('${x.dt_id}')">
+    <div class="top"><b>${x.dt_id}</b><span class="tag t-watch">${x.scope}</span>
+    <time>${x.detected_at.replace("T"," ").slice(5,16)}</time></div>
+    <p>${E(x.evidence)}</p><div class="kv">
+    <span>dark <b>${x.n_affected}</b></span>
+    <span>phases <b>${x.phases.map(p=>PH[p]).join(" ")}</b></span>
+    <span>bracket <b>${N(x.depth_lower_ohm,4)}–${N(x.depth_upper_ohm,4)} Ω</b></span>
+    <span>confidence <b>${P(x.confidence)}</b></span>
+    ${x.restored_at?`<span>restored <b>${x.restored_at.replace("T"," ").slice(11,16)}</b></span>`:""}
+    </div></div>`).join("")||`<div class="evt"><p>none</p></div>`;
+
+  const corrCols=[
+    {k:"meter_id",h:"Consumer",c:"id"},
+    {k:"recorded_dt_id",h:"Ledger says",f:r=>`<span style="color:var(--crit)">${
+      r.recorded_dt_id??""} · ${r.recorded_phase==null?"":PH[r.recorded_phase]}</span>`},
+    {k:"inferred_dt_id",h:"Actually on",f:r=>`<span style="color:var(--ok)">${
+      r.inferred_dt_id} · ${PH[r.inferred_phase]}</span>`},
+    {k:"confidence",h:"Confidence",c:"n",f:r=>P(r.confidence)},
+    {k:"needs_verification",h:"",f:r=>String(r.needs_verification).toLowerCase()==="true"
+      ?'<span class="tag t-high">verify</span>':""},
+  ];
+  const ct=mkTable($("#corr"),corrCols,corr);
+  $("#corrn").textContent=`${corr.length} shown`;
+  $("#corrsearch").oninput=e=>{const q=e.target.value.trim().toUpperCase();
+    const rows=corr.filter(r=>!q||r.meter_id.includes(q)||String(r.inferred_dt_id).includes(q));
+    ct.redraw(rows); $("#corrn").textContent=`${rows.length} shown`;};
+
+  $("#vmetrics").innerHTML=[
+    {k:"Excursions",v:v.excursions,c:"c-high",s:"sustained violations of ±6%"},
+    {k:"Reverse-flow driven",v:v.reverse_flow_driven,c:"c-crit",s:"coincident with PV export"},
+    {k:"Overvoltage",v:v.overvoltage,c:"c-high",s:"above 243.8 V"},
+    {k:"Setpoints issued",v:v.setpoints_issued,c:"c-ok",s:"reactive first, curtailment last"},
+  ].map(x=>`<div class="metric"><div class="k">${x.k}</div>
+    <div class="v ${x.c}">${x.v}</div><div class="s">${x.s}</div></div>`).join("");
+
+  mkTable($("#exc"),[
+    {k:"dt_id",h:"Unit",c:"id"},
+    {k:"phase",h:"Ph",f:r=>PH[r.phase]},
+    {k:"kind",h:"Kind",f:r=>`<span class="tag ${r.kind==="overvoltage"?"t-high":"t-watch"}">${r.kind}</span>`},
+    {k:"start",h:"Start",f:r=>r.start.replace("T"," ").slice(5,16)},
+    {k:"worst_voltage",h:"Worst V",c:"n",f:r=>N(r.worst_voltage,1)},
+    {k:"n_meters",h:"Consumers",c:"n"},
+    {k:"reverse_flow",h:"Reverse",f:r=>r.reverse_flow?'<span class="tag t-critical">yes</span>':""},
+  ],volt.excursions,r=>openDT(r.dt_id));
+
+  mkTable($("#sp"),[
+    {k:"meter_id",h:"Inverter",c:"id"},
+    {k:"dt_id",h:"Unit",c:"id"},
+    {k:"phase",h:"Ph",f:r=>PH[r.phase]},
+    {k:"q_kvar",h:"Reactive kvar",c:"n",f:r=>N(r.q_kvar,3)},
+    {k:"curtail_kw",h:"Curtail kW",c:"n",f:r=>r.curtail_kw?N(r.curtail_kw,2):""},
+    {k:"reason",h:"Reason",f:r=>`<span style="color:var(--mid)">${E(r.reason)}</span>`},
+  ],volt.setpoints,r=>openDT(r.dt_id));
+
+  drawMap();
+})().catch(e=>{
+  $("#boot").classList.add("done");
+  $("main").innerHTML=`<div class="empty">could not load results (${e})<br><br>
+    run <b>python -m entitygrid.sim.generate</b> then <b>python -m entitygrid.pipeline</b></div>`;
+});
+window.openDT=openDT;
+</script>
+</body>
+</html>
