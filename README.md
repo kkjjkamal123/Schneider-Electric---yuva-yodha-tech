@@ -4,6 +4,7 @@
 
 <b>The low voltage grid has no map. I built one out of the smart meters that are already there.</b>
 
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Challenge](https://img.shields.io/badge/Yuva%20Yodha%202026-Grid%20Reliability-blue)](#what-entity-grid-is)
 [![Python](https://img.shields.io/badge/python-3.12-green)](#quick-start)
 [![Tests](https://img.shields.io/badge/tests-14%20passing-brightgreen)](#quick-start)
@@ -157,4 +158,4 @@ The method draws on published work on data driven phase identification, in parti
 
 ## License
 
-MIT.
+Apache 2.0. See [LICENSE](LICENSE).
