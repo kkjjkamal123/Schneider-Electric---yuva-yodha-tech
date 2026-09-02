@@ -272,6 +272,62 @@ input[type=range]{width:100%;accent-color:var(--accent);background:transparent}
     </div>
   </section>
 
+  <section id="s-flex">
+    <div class="head"><span class="idx">07</span><h2>Neighbourhood Flexibility</h2></div>
+    <p class="lede">The challenge asks for clean power made dependable street by street,
+      using forecasting, demand response and shared storage. None of those can be aimed at a
+      network nobody has mapped. Forecasts run <b>per phase</b>, because a feeder is almost
+      never in trouble as a whole, one phase is overloaded while another sits idle. Every
+      demand response call list is filtered to the consumers actually on the transformer and
+      phase in trouble.</p>
+    <div class="metrics" id="fmetrics"></div>
+
+    <h3 class="sub">Predicted constraints for the next day</h3>
+    <div class="panel">
+      <div class="ph"><b>Where the neighbourhood runs out of room</b>
+        <span>forecast, not measured</span></div>
+      <div class="scroll"><table id="constraints"></table></div>
+    </div>
+
+    <h3 class="sub">Demand response, targeted by transformer and phase</h3>
+    <div class="cards" id="drplans"></div>
+
+    <h3 class="sub">Community storage sized from the forecast</h3>
+    <div class="cards" id="storage"></div>
+
+    <h3 class="sub">Forecast skill against free baselines</h3>
+    <div class="panel">
+      <div class="ph"><b>Per-phase day-ahead net load</b>
+        <span>skill is MAE reduction against the best free baseline</span></div>
+      <div class="scroll"><table id="fskill"></table></div>
+    </div>
+  </section>
+
+  <section id="s-evidence">
+    <div class="head"><span class="idx">08</span><h2>Method Evidence</h2></div>
+    <p class="lede">Everything below is a comparison run against ourselves. Two of these
+      tables record methods that <b>lost</b>, and they are kept because a number with no
+      alternative beside it is not evidence.</p>
+
+    <h3 class="sub">Topology methods under stress</h3>
+    <p class="lede">Joint accuracy, transformer and phase. The naive correlation most people
+      write first scores below the utility ledger it was meant to replace, so deploying it
+      would make the records worse.</p>
+    <div class="panel"><div class="scroll"><table id="bench-topo"></table></div></div>
+
+    <h3 class="sub">Degradation detectors</h3>
+    <p class="lede">A cumulative sum chart is the textbook answer for catching small
+      sustained shifts early, and it is what published work on transformer degradation uses.
+      On this data it lost badly, so the trend test ships instead.</p>
+    <div class="panel"><div class="scroll"><table id="bench-det"></table></div></div>
+
+    <h3 class="sub">How little data the topology learner needs</h3>
+    <div class="panel"><div class="scroll"><table id="bench-sens"></table></div></div>
+
+    <h3 class="sub">Voltage model fit per transformer</h3>
+    <div class="panel"><div class="scroll"><table id="bench-vm"></table></div></div>
+  </section>
+
   <section id="s-voltage">
     <div class="head"><span class="idx">07</span><h2>Solar &amp; Voltage</h2></div>
     <p class="lede">Rooftop PV reverses power flow at midday on feeders built to move it one
@@ -323,7 +379,8 @@ function boot(){
 
 /* ---------------- nav ---------------- */
 const TABS=[["overview","Scorecard"],["map","Network"],["fleet","Fleet"],
-            ["alerts","Alerts"],["faults","Faults"],["topology","Ledger"],["voltage","Solar"]];
+            ["alerts","Alerts"],["faults","Faults"],["topology","Ledger"],
+            ["voltage","Solar"],["flex","Flexibility"],["evidence","Evidence"]];
 TABS.forEach(([id,label],i)=>{
   const b=document.createElement("button");
   b.textContent=label; if(!i)b.classList.add("on");
@@ -561,10 +618,11 @@ $("#mapsearch").oninput=e=>{
 /* ---------------- render ---------------- */
 (async function(){
   boot();
-  const [status,score,fleet,alerts,faults,corr,volt,graph]=await Promise.all([
+  const [status,score,fleet,alerts,faults,corr,volt,graph,flex,bench]=await Promise.all([
     get("/api/status"),get("/api/scorecard"),get("/api/fleet"),get("/api/alerts"),
     get("/api/faults"),get("/api/topology/corrections?limit=400"),
-    get("/api/voltage?limit=250"),get("/api/network/graph")]);
+    get("/api/voltage?limit=250"),get("/api/network/graph"),
+    get("/api/flex?limit=200"),get("/api/benchmarks")]);
   DATA={graph};
   const t=score.topology,h=score.health,f=score.faults,v=score.voltage,m=status.meta;
 
@@ -712,6 +770,115 @@ $("#mapsearch").oninput=e=>{
     {k:"curtail_kw",h:"Curtail kW",c:"n",f:r=>r.curtail_kw?N(r.curtail_kw,2):""},
     {k:"reason",h:"Reason",f:r=>`<span style="color:var(--mid)">${E(r.reason)}</span>`},
   ],volt.setpoints,r=>openDT(r.dt_id));
+
+  // ---- flexibility -------------------------------------------------------
+  const fx=flex.summary;
+  $("#fmetrics").innerHTML=[
+    {k:"Forecast skill",v:(fx.mean_skill_vs_baseline*100).toFixed(1)+"%",c:"c-ok",
+     s:"MAE reduction over the best free baseline<br>"+fx.forecasters_beating_baseline+
+       " of "+fx.forecasters+" phases beat it"},
+    {k:"Constraints predicted",v:fx.constraint_windows,c:"c-high",
+     s:Object.entries(fx.constraints_by_kind||{}).map(function(e){return e[1]+" "+e[0];}).join(" &middot; ")},
+    {k:"Covered by demand response",v:fx.dr_fully_covered+"/"+fx.dr_plans,c:"c-accent",
+     s:"flexible consumers found at "+Number(fx.flexibility_lift_over_base_rate).toFixed(1)+
+       "x the base rate, from load shape alone"},
+    {k:"Storage sized",v:Math.round(fx.storage_total_kwh)+" kWh",c:"c-accent",
+     s:"across "+fx.storage_sites+" transformers, sized from the forecast"},
+  ].map(function(x){return '<div class="metric"><div class="k">'+x.k+'</div><div class="v '+
+    x.c+'">'+x.v+'</div><div class="s">'+x.s+'</div></div>';}).join("");
+
+  mkTable($("#constraints"),[
+    {k:"dt_id",h:"Unit",c:"id"},
+    {k:"phase",h:"Ph",f:function(r){return r.phase==null?"\u2014":PH[r.phase];}},
+    {k:"kind",h:"Kind",f:function(r){
+      var t=r.kind==="thermal"?"t-critical":(r.kind==="export"?"t-watch":"t-high");
+      return '<span class="tag '+t+'">'+r.kind+'</span>';}},
+    {k:"start",h:"From",f:function(r){return String(r.start).replace("T"," ").slice(5,16);}},
+    {k:"intervals",h:"Steps",c:"n"},
+    {k:"peak_deficit_kw",h:"Deficit kW",c:"n",f:function(r){return N(r.peak_deficit_kw,1);}},
+    {k:"energy_deficit_kwh",h:"kWh",c:"n",f:function(r){return N(r.energy_deficit_kwh,1);}},
+    {k:"worst_value",h:"Worst",c:"n",f:function(r){return N(r.worst_value,1);}},
+  ],flex.constraints,function(r){openDT(r.dt_id);});
+
+  $("#drplans").innerHTML=(flex.dr_plans||[]).slice(0,9).map(function(p){
+    return '<div class="evt" onclick="openDT(\''+p.dt_id+'\')"><div class="top"><b>'+
+      p.dt_id+(p.phase==null?"":" &middot; "+PH[p.phase])+'</b><span class="tag '+
+      (p.shortfall_kw>0?"t-high":"t-watch")+'">'+p.kind+'</span><time>'+
+      String(p.start).replace("T"," ").slice(5,16)+'</time></div><p>'+E(p.evidence)+
+      '</p><div class="kv"><span>needed <b>'+N(p.required_kw,1)+
+      ' kW</b></span><span>delivered <b>'+N(p.delivered_kw,1)+
+      ' kW</b></span><span>consumers <b>'+p.consumers.length+'</b></span></div></div>';
+  }).join("")||'<div class="evt"><p>none</p></div>';
+
+  $("#storage").innerHTML=(flex.storage||[]).map(function(s){
+    return '<div class="evt" onclick="openDT(\''+s.dt_id+'\')"><div class="top"><b>'+
+      s.dt_id+'</b><span class="tag t-watch">'+N(s.power_kw,0)+" kW / "+N(s.energy_kwh,0)+
+      ' kWh</span></div><p>'+E(s.evidence)+'</p><div class="kv"><span>clears <b>'+
+      s.constraints_cleared+'</b> windows</span><span>peak cut <b>'+N(s.peak_reduction_kw,1)+
+      ' kW</b></span><span>PV absorbed <b>'+N(s.export_absorbed_kwh,0)+
+      ' kWh</b></span></div></div>';
+  }).join("")||'<div class="evt"><p>none</p></div>';
+
+  mkTable($("#fskill"),[
+    {k:"dt_id",h:"Unit and phase",c:"id"},
+    {k:"mae_kw",h:"MAE kW",c:"n",f:function(r){return N(r.mae_kw,2);}},
+    {k:"nmae_pct",h:"nMAE",c:"n",f:function(r){return N(r.nmae_pct,2)+"%";}},
+    {k:"mae_best_baseline",h:"Best baseline",c:"n",f:function(r){return N(r.mae_best_baseline,2);}},
+    {k:"skill_vs_best_baseline",h:"Skill",c:"n",f:function(r){
+      var c=r.skill_vs_best_baseline>0?"var(--ok)":"var(--crit)";
+      return '<b style="color:'+c+'">'+(r.skill_vs_best_baseline*100).toFixed(1)+"%</b>";}},
+  ],flex.forecast_skill||[]);
+
+  // ---- evidence ----------------------------------------------------------
+  var bt=bench.topology||[];
+  var scen=[],meth=[];
+  bt.forEach(function(r){ if(scen.indexOf(r.scenario)<0)scen.push(r.scenario);
+                          if(meth.indexOf(r.method)<0)meth.push(r.method); });
+  var pivot=scen.map(function(sc){
+    var row={scenario:sc},vals=[];
+    meth.forEach(function(m){
+      var hit=bt.filter(function(r){return r.scenario===sc&&r.method===m;})[0];
+      row[m]=hit?hit.joint_accuracy:null; if(row[m]!=null)vals.push(row[m]);});
+    row._best=vals.length?Math.max.apply(null,vals):null;
+    var any=bt.filter(function(r){return r.scenario===sc;})[0];
+    row._ledger=any?any.ledger_baseline:null;
+    return row;});
+  mkTable($("#bench-topo"),[{k:"scenario",h:"Scenario"}].concat(
+    meth.map(function(m){return {k:m,h:m,c:"n",f:function(r){
+      if(r[m]==null)return "\u2014";
+      var col=Math.abs(r[m]-r._best)<1e-9?"var(--ok)":
+        (r._ledger!=null&&r[m]<r._ledger?"var(--crit)":"var(--mid)");
+      return '<b style="color:'+col+'">'+(r[m]*100).toFixed(1)+"</b>";}};}),
+    [{k:"_ledger",h:"Ledger",c:"n",f:function(r){
+      return r._ledger==null?"\u2014":(r._ledger*100).toFixed(1);}}]),pivot);
+
+  mkTable($("#bench-det"),[
+    {k:"detector",h:"Detector"},
+    {k:"detected",h:"Found",c:"n",f:function(r){return r.detected+"/"+r.of_degrading;}},
+    {k:"false_alarms",h:"False alarms",c:"n",f:function(r){
+      return '<b style="color:'+(r.false_alarms?"var(--crit)":"var(--ok)")+'">'+
+        r.false_alarms+"</b>";}},
+    {k:"implausible_timing",h:"Implausible",c:"n"},
+    {k:"mean_lead_days",h:"Mean lead",c:"n",f:function(r){return N(r.mean_lead_days,1);}},
+  ],bench.detectors||[]);
+
+  mkTable($("#bench-sens"),[
+    {k:"axis",h:"Axis"},{k:"value",h:"Value",c:"n"},
+    {k:"dt_accuracy",h:"Transformer",c:"n",f:function(r){return P(r.dt_accuracy);}},
+    {k:"phase_accuracy",h:"Phase",c:"n",f:function(r){return P(r.phase_accuracy);}},
+    {k:"joint_accuracy",h:"Joint",c:"n",f:function(r){return "<b>"+P(r.joint_accuracy)+"</b>";}},
+  ],bench.sensitivity||[]);
+
+  mkTable($("#bench-vm"),[
+    {k:"dt_id",h:"Unit",c:"id"},
+    {k:"r2",h:"R2",c:"n",f:function(r){return N(r.r2,3);}},
+    {k:"residual_v",h:"Residual V",c:"n",f:function(r){return N(r.residual_v,2);}},
+    {k:"worst_phase",h:"Worst phase"},
+    {k:"sensitivity_v_per_kw",h:"V per kW",c:"n",f:function(r){return N(r.sensitivity_v_per_kw,3);}},
+    {k:"trusted",h:"Used",f:function(r){
+      return String(r.trusted).toLowerCase()==="true"
+        ?'<span class="tag t-watch">yes</span>':'<span class="tag t-high">no</span>';}},
+  ],bench.voltage_models||[]);
 
   drawMap();
 })().catch(e=>{

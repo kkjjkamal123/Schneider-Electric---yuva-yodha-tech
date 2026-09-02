@@ -209,11 +209,12 @@ footer .row{display:flex;gap:12px 34px;flex-wrap:wrap;align-items:center;
     <div>
       <span class="eyebrow">Yuva Yodha Energy Tech Hackathon 2026 · Grid Reliability</span>
       <h1>Your grid ends<br>where your <em>map</em><br>stops being true.</h1>
-      <p class="sub">Below the substation, a DISCOM is flying blind: roughly
-        <b>one consumer in three is booked to the wrong transformer or phase</b>, transformers
-        fail without warning, and a tripped feeder is still found by driving the line with a
-        torch. ENTITY GRID fixes all three from the smart meters you are already installing.
-        <b>No new hardware. No site survey. No capex.</b></p>
+      <p class="sub">You cannot forecast a feeder, dispatch demand response or site a
+        community battery on a network nobody has mapped. And roughly
+        <b>one consumer in three is booked to the wrong transformer or phase</b>.
+        ENTITY GRID learns the real map from the smart meters already going in, then uses it
+        to make the neighbourhood dependable: per phase forecasts, targeted demand response,
+        storage sized from the forecast. <b>No new hardware. No site survey. No capex.</b></p>
       <div class="cta-row">
         <a class="btn btn-primary" href="/dashboard">Open the live console →</a>
         <a class="btn btn-ghost" href="#how">See how it works</a>
@@ -289,6 +290,15 @@ footer .row{display:flex;gap:12px 34px;flex-wrap:wrap;align-items:center;
           consumer still lit. The two ends of the span a crew has to walk.</p>
         <div class="stat">6 of 6 faults located · <b>~1 second</b> from first message</div>
       </div>
+      <div class="cell">
+        <div class="n">04</div>
+        <h3>Aim flexibility<br>at the right street</h3>
+        <p>Forecast every phase of every transformer a day ahead, find where the
+          neighbourhood runs out of room, then call only the consumers on that transformer
+          and that phase who actually have load worth moving. Size a community battery from
+          the same forecast rather than a rule of thumb.</p>
+        <div class="stat">Deferrable consumers found at <b>5x the base rate</b>, from load shape alone</div>
+      </div>
     </div>
   </div>
 </section>
@@ -329,12 +339,25 @@ footer .row{display:flex;gap:12px 34px;flex-wrap:wrap;align-items:center;
       <div class="step">
         <div class="big">03</div>
         <div>
-          <h3>Read condition off the same signal</h3>
+          <h3>Read condition, and faults, off the same signal</h3>
           <p>With a correct map, the physics becomes legible: estimated impedance per
             transformer and per segment, tracked against each asset's own baseline. Rising
             neutral impedance is a corroding joint. A last-gasp burst is a located fault.
             Midday overvoltage with export is reverse power flow. Answered with reactive
             setpoints before curtailment.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="big">04</div>
+        <div>
+          <h3>Turn the map into flexibility</h3>
+          <p>With connectivity known, every phase of every transformer gets a day ahead net
+            load forecast, built from calendar position, its own recent history and a
+            purchased irradiance forecast that is deliberately degraded to the accuracy a
+            utility would really buy. Where the forecast breaches a thermal or voltage limit,
+            the system picks the consumers who can actually help, on the phase that is
+            actually in trouble, and sizes storage for whatever demand response cannot
+            cover.</p>
         </div>
       </div>
     </div>
@@ -385,10 +408,24 @@ footer .row{display:flex;gap:12px 34px;flex-wrap:wrap;align-items:center;
         <h4>Built for 2G backhaul</h4>
         <p>Inference belongs at the DT gateway with anomalies uplinked, not a firehose to
           the cloud. Because rural comms will not carry a firehose.</p></div>
+      <div class="feat"><div class="k">Forecast</div>
+        <h4>Per phase, not per transformer</h4>
+        <p>A feeder is rarely in trouble as a whole. One phase overloads while another idles,
+          and a forecast that sums the three together cannot see the problem worth acting
+          on.</p></div>
+      <div class="feat"><div class="k">Flexibility</div>
+        <h4>Deferrable load inferred, not asked</h4>
+        <p>Nobody knows which consumers can shift load. Pumping looks unmistakable in
+          interval data: long runs, high peaks, mostly at night. Scored from shape alone,
+          never from a tariff category.</p></div>
+      <div class="feat"><div class="k">Storage</div>
+        <h4>Sized from the forecast</h4>
+        <p>Power set by the largest predicted deficit, energy by the largest deficit area,
+          charging from the midday export the same feeder is already spilling.</p></div>
       <div class="feat"><div class="k">Integration</div>
-        <h4>Feeds ADMS, not replaces it</h4>
-        <p>Designed as a module that corrects and enriches an existing EcoStruxure Grid or
-          ADMS deployment. Nobody has to rip anything out.</p></div>
+        <h4>Feeds ADMS and DERMS</h4>
+        <p>Designed as the low voltage layer beneath an existing EcoStruxure Grid, ADMS or
+          DERMS deployment. Both assume a network model that Indian LV does not have.</p></div>
     </div>
   </div>
 </section>
@@ -406,8 +443,9 @@ footer .row{display:flex;gap:12px 34px;flex-wrap:wrap;align-items:center;
 
     <div class="evidence">
       <blockquote>The utility ledger had <b>150 consumers on the wrong transformer or
-        phase</b>. ENTITY GRID found every one of them from thirty days of voltage data,
-        without a single site visit.</blockquote>
+        phase</b>. ENTITY GRID found every one of them from voltage data alone, without a
+        single site visit. The obvious method, plain correlation, scores
+        <b>below the ledger it was replacing</b>.</blockquote>
       <p class="attr">Result from the reference run in this repository, 486 consumers across
         12 transformers, 15-minute interval data. Ground truth is used only for scoring; a
         test in the suite fails the build if the topology learner so much as opens a truth
@@ -424,7 +462,7 @@ footer .row{display:flex;gap:12px 34px;flex-wrap:wrap;align-items:center;
       <div class="num"><div class="v ok">6/6</div><div class="k">Faults located</div>
         <div class="s">100% precision, ~1s detection</div></div>
       <div class="num"><div class="v">2 days</div><div class="k">Cold start</div>
-        <div class="s">97% after a single day of data</div></div>
+        <div class="s">98% after a single day of data</div></div>
     </div>
   </div>
 </section>
@@ -512,6 +550,23 @@ footer .row{display:flex;gap:12px 34px;flex-wrap:wrap;align-items:center;
         current and drops voltage without changing the ohms between busbar and consumer.
         Degradation raises those ohms. Separate estimates are kept for the transformer
         winding, the phase conductor and the neutral, and the three fail in different ways.</div></details>
+
+    <details><summary>How does this answer a challenge about intermittency and storage?</summary>
+      <div class="ans">By making the rest of it aimable. Forecasting, demand response and
+        shared storage all need to know which consumers sit behind which transformer and
+        phase, and that is exactly the record that is wrong a third of the time. ENTITY GRID
+        recovers it, then builds the flexibility layer on top: per phase day ahead forecasts
+        at 13% better than the best free baseline, predicted constraint windows, call lists
+        filtered to the phase in trouble, and storage sized from the forecast.</div></details>
+
+    <details><summary>Did anything you tried not work?</summary>
+      <div class="ans">Two things, both still in the repository. A cumulative sum control
+        chart is the textbook detector for slow degradation and is what the published work
+        uses; on this data it raised eight false alarms to catch one real fault, against zero
+        false alarms for the trend test that ships. Restricting correlation to low load
+        intervals, which the literature reports as a clear improvement, gained about three
+        points under clock drift and lost ground everywhere else, so it is available and off
+        by default. Both comparisons are on the Evidence tab of the console.</div></details>
 
     <details><summary>Where does it admit it cannot help?</summary>
       <div class="ans">Busbar-referenced winding detection fails on a feeder whose MV source

@@ -9,6 +9,7 @@ thresholds rather than "it ran without raising".
 from __future__ import annotations
 
 import numpy as np
+from dataclasses import replace
 import pandas as pd
 import pytest
 
@@ -246,3 +247,133 @@ def test_dataset_timestamps_survive_the_round_trip(small_dataset):
     assert stamps[0].year == 2026, f"got {stamps[0]}, expected a 2026 date"
     spacing = (stamps[1] - stamps[0]).total_seconds() / 60
     assert spacing == SMALL.interval_minutes
+
+
+# --------------------------------------------------------------------------
+# timestamp alignment
+# --------------------------------------------------------------------------
+
+def test_alignment_recovers_injected_clock_drift(tmp_path_factory):
+    """The headline claim of the align module, checked against known offsets."""
+    from entitygrid.io import load_dataset
+    from entitygrid.topology.align import estimate_offsets
+
+    cfg = replace(SMALL, clock_drift_fraction=0.30, days=14)
+    out = tmp_path_factory.mktemp("drift")
+    generate_dataset(cfg, out_dir=out)
+    ds = load_dataset(out)
+
+    truth = np.load(out / "ground_truth_voltage.npz")["clock_offsets"]
+    assert (truth != 0).any(), "no drift was injected, the test proves nothing"
+
+    result = estimate_offsets(ds.voltage, ds.dt_voltage)
+    exact = int((result.offsets == truth).sum())
+    false_positives = int(((result.offsets != 0) & (truth == 0)).sum())
+
+    assert exact / len(truth) > 0.95, f"only {exact}/{len(truth)} offsets recovered"
+    assert false_positives == 0, f"{false_positives} healthy meters were shifted"
+
+
+def test_alignment_leaves_clean_data_alone(small_dataset):
+    """A dataset with no drift must not be rewritten."""
+    from entitygrid.topology.align import estimate_offsets
+    result = estimate_offsets(small_dataset.voltage, small_dataset.dt_voltage)
+    assert result.n_shifted <= 0.02 * len(small_dataset.meter_ids)
+
+
+# --------------------------------------------------------------------------
+# flexibility
+# --------------------------------------------------------------------------
+
+def test_flexibility_proxy_ranks_deferrable_load_first(small_dataset):
+    """Inferred flexibility must track real consumer class without seeing it."""
+    from entitygrid.flex.dispatch import estimate_flexibility, score_flexibility
+
+    ds = small_dataset
+    flex = estimate_flexibility(ds.net_p_kw, ds.meter_ids, ds.steps_per_day)
+    assert flex["flexibility"].between(0, 1).all()
+
+    score = score_flexibility(flex, ds.truth_meters)
+    by_type = score["mean_flexibility_by_type"]
+    if "agricultural" in by_type and "domestic" in by_type:
+        assert by_type["agricultural"] > by_type["domestic"], (
+            "pumping should score as more deferrable than household lighting")
+
+
+def test_pv_forecast_is_degraded_not_truth(small_dataset):
+    """The forecaster must never be handed tomorrow's actual generation."""
+    from entitygrid.flex.forecast import pv_day_ahead_forecast
+
+    ds = small_dataset
+    actual = ds.solar_kw[:, 0]
+    if actual.max() <= 0:
+        pytest.skip("this meter has no PV")
+    forecast = pv_day_ahead_forecast(actual, ds.steps_per_day, seed=1)
+    assert not np.allclose(forecast, actual), "PV forecast leaked the truth"
+    assert (forecast >= 0).all()
+
+
+def test_voltage_model_uses_per_phase_loads(small_dataset):
+    """Per-phase drop modelling must fit better than nothing at all."""
+    from entitygrid.flex.headroom import fit_voltage_models, model_quality
+    from entitygrid.topology.learn import learn_topology
+
+    ds = small_dataset
+    topology = learn_topology(ds.voltage, ds.meter_ids, ds.dt_voltage, ds.dt_ids)
+    models = fit_voltage_models(ds.voltage, ds.meter_ids, ds.net_p_kw,
+                                ds.dt_voltage, ds.dt_ids, topology.assignments)
+    if not models:
+        pytest.skip("network too small to fit voltage models")
+    quality = model_quality(models)
+    assert quality["r2"].max() > 0.4
+    assert set(quality["worst_phase"]) <= {"R", "Y", "B"}
+
+
+def test_demand_response_only_calls_consumers_on_the_right_feeder(small_dataset):
+    """A call list that reaches the wrong transformer is worse than useless."""
+    from entitygrid.flex.dispatch import estimate_flexibility, plan_demand_response
+    from entitygrid.flex.headroom import ConstraintWindow
+    from entitygrid.topology.learn import learn_topology
+
+    ds = small_dataset
+    topology = learn_topology(ds.voltage, ds.meter_ids, ds.dt_voltage, ds.dt_ids)
+    flex = estimate_flexibility(ds.net_p_kw, ds.meter_ids, ds.steps_per_day)
+
+    dt_id = str(topology.assignments["inferred_dt_id"].iloc[0])
+    window = ConstraintWindow(
+        dt_id=dt_id, kind="thermal", start=ds.timestamps[10],
+        end=ds.timestamps[14], peak_deficit_kw=5.0, energy_deficit_kwh=5.0,
+        worst_value=100.0, limit=90.0, phase=0)
+
+    plan = plan_demand_response(window, flex, topology.assignments, ds.net_p_kw,
+                               ds.meter_ids, ds.timestamps)
+    members = set(topology.assignments[
+        (topology.assignments["inferred_dt_id"] == dt_id)
+        & (topology.assignments["inferred_phase"] == 0)]["meter_id"])
+    assert set(plan.consumers) <= members
+    assert plan.delivered_kw >= 0
+
+
+# --------------------------------------------------------------------------
+# detector selection
+# --------------------------------------------------------------------------
+
+def test_segment_detection_is_causal():
+    """Detection must not use data from after the day it claims to detect on."""
+    from entitygrid.health.localized import detect_segments
+
+    days = np.arange(40)
+    # Flat until day 25, then a clean ramp.
+    series = np.where(days < 25, 0.01, 0.01 + (days - 25) * 0.002)
+    frame = pd.DataFrame({
+        "meter_id": ["M1"] * 40 + ["M2"] * 40,
+        "dt_id": ["DT01"] * 80,
+        "phase": [0] * 80,
+        "day": np.concatenate([days, days]),
+        "excess_ohm": np.concatenate([series, series * 1.02]),
+    })
+    alerts = detect_segments(frame)
+    assert alerts, "a clean ramp should be detected"
+    # Nothing may be detected before the ramp starts.
+    assert all(a.onset_day >= 25 for a in alerts), (
+        f"detected at {[a.onset_day for a in alerts]}, before the change at day 25")

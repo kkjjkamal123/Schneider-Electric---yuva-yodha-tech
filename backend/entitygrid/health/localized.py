@@ -121,31 +121,43 @@ def detect_segments(excess: pd.DataFrame, min_group: int = 2) -> list[SegmentAle
 
         baseline = series[:BASELINE_DAYS]
         noise = float(np.std(baseline)) or 1e-9
-        x = np.arange(len(series), dtype=float)
-        xc = x - x.mean()
-        denom = float(xc @ xc)
-        slope = float((xc @ (series - series.mean())) / denom)
 
-        # Significance of the trend itself, not of one day against another.
-        residual = series - (series.mean() + slope * xc)
-        stderr = float(np.sqrt((residual @ residual) / max(1, len(series) - 2) / denom))
-        t_stat = slope / stderr if stderr > 0 else 0.0
-        total_sigma = slope * len(series) / noise
+        # Walk forward and report the first day the evidence would actually
+        # have been sufficient. Fitting the trend over the whole series and
+        # then quoting an early onset is lookahead: it credits the detector
+        # with a warning it could not have given at the time.
+        detected_at = None
+        stats = None
+        for day in range(BASELINE_DAYS + 3, len(series)):
+            window = series[:day + 1]
+            x = np.arange(len(window), dtype=float)
+            xc = x - x.mean()
+            denom = float(xc @ xc)
+            if denom <= 0:
+                continue
+            slope = float((xc @ (window - window.mean())) / denom)
 
-        if (slope < MIN_DRIFT_OHM_PER_DAY or t_stat < MIN_TREND_T
-                or total_sigma < MIN_TOTAL_SIGMA):
+            residual = window - (window.mean() + slope * xc)
+            stderr = float(np.sqrt(
+                (residual @ residual) / max(1, len(window) - 2) / denom))
+            t_stat = slope / stderr if stderr > 0 else 0.0
+            total_sigma = slope * len(window) / noise
+
+            if (slope >= MIN_DRIFT_OHM_PER_DAY and t_stat >= MIN_TREND_T
+                    and total_sigma >= MIN_TOTAL_SIGMA):
+                detected_at = day
+                stats = (slope, t_stat)
+                break
+
+        if detected_at is None:
             continue
 
-        # First day the meter clears three sigma above its own baseline.
-        threshold = float(np.median(baseline)) + 3.0 * noise
-        over = np.where(series > threshold)[0]
-        onset = int(over[0]) if len(over) else BASELINE_DAYS
-
+        slope, t_stat = stats
         drifting.append({
             "meter_id": meter_id, "dt_id": block["dt_id"].iat[0],
             "phase": int(block["phase"].iat[0]), "slope": slope,
-            "onset": onset, "sigma": t_stat,
-            "excess": float(series[-3:].mean() - np.median(baseline)),
+            "onset": int(block["day"].iloc[detected_at]), "sigma": t_stat,
+            "excess": float(series[detected_at] - np.median(baseline)),
             "series": series,
         })
 

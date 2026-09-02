@@ -36,9 +36,10 @@ from sklearn.cluster import AgglomerativeClustering
 from entitygrid.sim.network import PHASE_NAMES
 from entitygrid.topology.features import (
     correlation_distance,
-    correlation_matrix,
+    masked_correlation,
     reference_signatures,
     residual_delta_voltage,
+    usable_intervals,
 )
 
 # Below this margin between the best and runner-up transformer match, the
@@ -62,7 +63,14 @@ class TopologyResult:
 
 
 def learn_topology(voltage: np.ndarray, meter_ids: np.ndarray,
-                   dt_voltage: np.ndarray, dt_ids: np.ndarray) -> TopologyResult:
+                   dt_voltage: np.ndarray, dt_ids: np.ndarray,
+                   *,
+                   common_mode: bool = True,
+                   difference: bool = True,
+                   own_load: np.ndarray | None = None,
+                   hours: np.ndarray | None = None,
+                   exclude_hours: tuple[int, int] | None = None,
+                   ) -> TopologyResult:
     """Infer meter-to-transformer-to-phase connectivity from voltage alone.
 
     Parameters
@@ -82,8 +90,17 @@ def learn_topology(voltage: np.ndarray, meter_ids: np.ndarray,
     assumption is that the asset register knows how many transformers exist,
     which every DISCOM does.
     """
-    residual = residual_delta_voltage(voltage)
-    corr = correlation_matrix(residual)
+    residual = residual_delta_voltage(
+        voltage, common_mode=common_mode, difference=difference)
+
+    # Interval selection runs on the differenced grid, so drop the first sample
+    # to keep the mask aligned with the residual it filters.
+    mask = usable_intervals(
+        None if own_load is None else own_load[1:] if difference else own_load,
+        None if hours is None else hours[1:] if difference else hours,
+        exclude_hours)
+
+    corr = masked_correlation(residual, mask)
     distance = correlation_distance(corr)
 
     n_groups = len(dt_ids) * 3
@@ -93,6 +110,10 @@ def learn_topology(voltage: np.ndarray, meter_ids: np.ndarray,
     ).fit_predict(distance)
 
     references = reference_signatures(dt_voltage)
+    # The references are always differenced. When the meter side is not, the
+    # two grids differ by one sample, so align on the common tail.
+    span = min(residual.shape[0], references.shape[1])
+    sig_source, references = residual[-span:], references[:, -span:]
 
     rows = []
     for cluster in range(n_groups):
@@ -100,7 +121,7 @@ def learn_topology(voltage: np.ndarray, meter_ids: np.ndarray,
         if len(members) == 0:
             continue
 
-        signature = residual[:, members].mean(axis=1)
+        signature = sig_source[:, members].mean(axis=1)
         signature = (signature - signature.mean()) / (signature.std() + 1e-9)
         scores = references @ signature / len(signature)
 

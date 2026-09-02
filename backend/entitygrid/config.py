@@ -60,7 +60,7 @@ class SimConfig:
     n_transformers: int = 12
     meters_per_dt: tuple[int, int] = (28, 55)
 
-    days: int = 30
+    days: int = 90
     interval_minutes: int = 15
 
     # Share of consumers carrying rooftop PV, and its kWp range.
@@ -71,6 +71,15 @@ class SimConfig:
     voltage_resolution_v: float = 0.1     # meters report 0.1 V steps
     voltage_noise_v: float = 0.25         # class 1 metrology + ADC noise
     missing_read_rate: float = 0.015      # comms gaps in the AMI head-end
+
+    # --- stress conditions ----------------------------------------------------
+    # Fraction of meters whose head-end timestamps are misaligned, and the
+    # maximum offset in intervals. Real AMI clocks drift and reads get stamped
+    # on arrival rather than on measurement; a meter shifted by one interval
+    # correlates with nobody, which is the single most damaging thing that can
+    # happen to a correlation-based topology learner.
+    clock_drift_fraction: float = 0.0
+    clock_drift_max_steps: int = 2
 
     # Ground-truth impairments ENTITY GRID has to cope with / detect.
     n_degrading_dts: int = 3              # DTs walked toward failure

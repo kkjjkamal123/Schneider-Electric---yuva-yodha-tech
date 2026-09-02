@@ -24,10 +24,16 @@ import pandas as pd
 
 from entitygrid.config import PROCESSED_DIR
 from entitygrid.faultloc.localize import group_events, localize, path_impedance
+from entitygrid.flex.dispatch import (estimate_flexibility, plan_demand_response,
+                                      score_flexibility, size_storage)
+from entitygrid.flex.forecast import forecast_all, split_key, summary as forecast_summary
+from entitygrid.flex.headroom import (fit_voltage_models, model_quality,
+                                      predict_constraints)
 from entitygrid.health.assess import assess, current_status
 from entitygrid.health.features import daily_features
 from entitygrid.health.localized import detect_segments, meter_excess_impedance
 from entitygrid.io import Dataset, load_dataset
+from entitygrid.topology.align import estimate_offsets
 from entitygrid.topology.evaluate import score_assignments
 from entitygrid.topology.learn import learn_topology
 from entitygrid.voltvar.controller import find_excursions, volt_var_response
@@ -62,7 +68,12 @@ def run(ds: Dataset | None = None, out_dir: Path | None = None) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # --- 1. topology ---------------------------------------------------------
-    topology = learn_topology(ds.voltage, ds.meter_ids, ds.dt_voltage, ds.dt_ids)
+    # Timestamp alignment runs first. Misaligned meters are the single largest
+    # source of topology error measured in the benchmark, and every later stage
+    # inherits whatever the learner gets wrong here.
+    alignment = estimate_offsets(ds.voltage, ds.dt_voltage)
+    topology = learn_topology(alignment.aligned, ds.meter_ids,
+                              ds.dt_voltage, ds.dt_ids)
     topology_score = score_assignments(
         topology.assignments, ds.truth_meters, ds.recorded_connectivity)
 
@@ -101,6 +112,36 @@ def run(ds: Dataset | None = None, out_dir: Path | None = None) -> dict:
         if excursion.reverse_flow:
             setpoints.extend(volt_var_response(excursion, depths, solar_kwp))
 
+    # --- 5. neighbourhood flexibility ----------------------------------------
+    forecasts = forecast_all(ds.net_p_kw, ds.meter_ids, topology.assignments,
+                             ds.timestamps, solar_kw=ds.solar_kw,
+                             steps_per_day=ds.steps_per_day)
+    forecast_table = forecast_summary(forecasts)
+    voltage_models = fit_voltage_models(ds.voltage, ds.meter_ids, ds.net_p_kw,
+                                        ds.dt_voltage, ds.dt_ids,
+                                        topology.assignments)
+    constraints = predict_constraints(forecasts, ratings, voltage_models,
+                                      interval_minutes=ds.interval_minutes)
+
+    flexibility = estimate_flexibility(ds.net_p_kw, ds.meter_ids, ds.steps_per_day)
+    flex_score = score_flexibility(flexibility, ds.truth_meters)
+
+    dr_plans = [
+        plan_demand_response(w, flexibility, topology.assignments, ds.net_p_kw,
+                             ds.meter_ids, ds.timestamps, depths)
+        for w in constraints[:60]
+    ]
+    storage_plans = []
+    for dt_id in sorted({w.dt_id for w in constraints}):
+        key = next((k for k in forecasts if split_key(k)[0] == dt_id), None)
+        if key is None:
+            continue
+        plan = size_storage(dt_id, forecasts[key], constraints,
+                            float(ratings.get(dt_id, 0.0)),
+                            interval_minutes=ds.interval_minutes)
+        if plan is not None:
+            storage_plans.append(plan)
+
     # --- scoring against truth ------------------------------------------------
     degrading = {d["dt_id"] for d in ds.truth_events["degradations"]}
     flagged_dts = {a.dt_id for a in alerts} | {s.dt_id for s in segments}
@@ -127,8 +168,28 @@ def run(ds: Dataset | None = None, out_dir: Path | None = None) -> dict:
         if onsets:
             lead_times.append(fail_day - min(onsets))
 
+    solved = [p for p in dr_plans if p.solved]
     scorecard = {
-        "topology": topology_score,
+        "topology": {**topology_score,
+                     "meters_realigned": int(alignment.n_shifted)},
+        "flexibility": {
+            "forecasters": int(len(forecasts)),
+            "mean_skill_vs_baseline": float(forecast_table["skill_vs_best_baseline"].mean()),
+            "median_nmae_pct": float(forecast_table["nmae_pct"].median()),
+            "forecasters_beating_baseline": int(
+                (forecast_table["skill_vs_best_baseline"] > 0).sum()),
+            "voltage_models_trusted": int(model_quality(voltage_models)["trusted"].sum()),
+            "voltage_model_median_r2": float(model_quality(voltage_models)["r2"].median()),
+            "constraint_windows": len(constraints),
+            "constraints_by_kind": {
+                k: sum(1 for c in constraints if c.kind == k)
+                for k in sorted({c.kind for c in constraints})},
+            "dr_plans": len(dr_plans),
+            "dr_fully_covered": len(solved),
+            "flexibility_lift_over_base_rate": flex_score["lift"],
+            "storage_sites": len(storage_plans),
+            "storage_total_kwh": float(sum(p.energy_kwh for p in storage_plans)),
+        },
         "health": {
             "degrading_transformers": sorted(degrading),
             "detected": sorted(degrading & flagged_dts),
@@ -162,6 +223,9 @@ def run(ds: Dataset | None = None, out_dir: Path | None = None) -> dict:
     health.to_csv(out_dir / "health_timeline.csv", index=False)
     fleet.to_csv(out_dir / "fleet_status.csv", index=False)
     depths.to_csv(out_dir / "path_impedance.csv", index=False)
+    forecast_table.to_csv(out_dir / "forecast_skill.csv", index=False)
+    flexibility.to_csv(out_dir / "flexibility.csv", index=False)
+    model_quality(voltage_models).to_csv(out_dir / "voltage_models.csv", index=False)
 
     payload = {
         "scorecard": _json_safe(scorecard),
@@ -170,6 +234,10 @@ def run(ds: Dataset | None = None, out_dir: Path | None = None) -> dict:
         "faults": [_json_safe(asdict(f)) for f in faults],
         "excursions": [_json_safe(asdict(e)) for e in excursions[:200]],
         "setpoints": [_json_safe(asdict(s)) for s in setpoints[:200]],
+        "constraints": [_json_safe(asdict(c)) for c in constraints[:200]],
+        "dr_plans": [_json_safe(asdict(p)) for p in dr_plans[:100]],
+        "storage": [_json_safe(asdict(p)) for p in storage_plans],
+        "forecast_skill": _json_safe(forecast_table.to_dict(orient="records")),
         "meta": {
             "meters": int(len(ds.meter_ids)),
             "transformers": int(len(ds.dt_ids)),
@@ -203,6 +271,13 @@ def main() -> None:
     print(f"Voltage    {v['excursions']} excursions "
           f"({v['reverse_flow_driven']} reverse-flow driven), "
           f"{v['setpoints_issued']} volt-var setpoints issued")
+    x = s["flexibility"]
+    print(f"Flex       {x['forecasters']} per-phase forecasters, "
+          f"{x['mean_skill_vs_baseline']:.0%} better than best baseline, "
+          f"{x['constraint_windows']} constraints predicted")
+    print(f"           {x['dr_fully_covered']}/{x['dr_plans']} covered by demand "
+          f"response, {x['storage_sites']} storage sites "
+          f"({x['storage_total_kwh']:.0f} kWh)")
     print("=" * 62)
     print(f"results -> {PROCESSED_DIR / 'results.json'}")
 

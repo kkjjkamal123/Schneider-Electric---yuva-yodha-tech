@@ -211,6 +211,39 @@ def meter_series(meter_id: str, day: int | None = None) -> dict:
     }
 
 
+@app.get("/api/flex")
+def flexibility(limit: int = 120) -> dict:
+    """Forecasts, predicted constraints and the dispatch that answers them."""
+    payload = results()
+    return {
+        "summary": payload["scorecard"]["flexibility"],
+        "forecast_skill": payload.get("forecast_skill", []),
+        "constraints": payload.get("constraints", [])[:limit],
+        "dr_plans": payload.get("dr_plans", [])[:limit],
+        "storage": payload.get("storage", []),
+    }
+
+
+@app.get("/api/flex/consumers")
+def flexible_consumers(limit: int = 200) -> list[dict]:
+    """Consumers ranked by how deferrable their load looks, from AMI alone."""
+    frame = table("flexibility").sort_values("flexibility", ascending=False)
+    return _clean(frame.head(limit))
+
+
+@app.get("/api/benchmarks")
+def benchmarks() -> dict:
+    """Head-to-head method comparisons, including the ones we lost."""
+    out: dict = {}
+    for name, key in (("topology_benchmark", "topology"),
+                      ("detector_benchmark", "detectors"),
+                      ("topology_sensitivity", "sensitivity"),
+                      ("voltage_models", "voltage_models")):
+        path = PROCESSED_DIR / f"{name}.csv"
+        out[key] = _clean(pd.read_csv(path)) if path.exists() else []
+    return out
+
+
 @app.get("/api/network/graph")
 def network_graph() -> dict:
     """Electrical schematic of the learned network.

@@ -38,6 +38,29 @@ LAST_GASP_DELIVERY_RATE = 0.86
 LAST_GASP_MAX_DELAY_S = 90
 
 
+def _apply_clock_drift(voltage: np.ndarray, current: np.ndarray, cfg: SimConfig,
+                       rng: np.random.Generator) -> np.ndarray:
+    """Shift a share of meters in time to model head-end timestamp misalignment.
+
+    Returns the per-meter offset in intervals so the harness can report it.
+    Nothing else in the system is told which meters were shifted.
+    """
+    n_meters = voltage.shape[1]
+    offsets = np.zeros(n_meters, dtype=int)
+    if cfg.clock_drift_fraction <= 0:
+        return offsets
+
+    n = int(round(cfg.clock_drift_fraction * n_meters))
+    picked = rng.choice(n_meters, size=n, replace=False)
+    for j in picked:
+        k = int(rng.integers(1, cfg.clock_drift_max_steps + 1))
+        k = k if rng.random() < 0.5 else -k
+        offsets[j] = k
+        voltage[:, j] = np.roll(voltage[:, j], k)
+        current[:, j] = np.roll(current[:, j], k)
+    return offsets
+
+
 def _apply_meter_model(voltage: np.ndarray, current: np.ndarray, cfg: SimConfig,
                        rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
     """Degrade true values into what a class-1 smart meter actually reports."""
@@ -131,6 +154,7 @@ def generate_dataset(cfg: SimConfig | None = None, out_dir: Path | None = None) 
             "neutral_current": result.neutral_current,
         }
 
+    clock_offsets = _apply_clock_drift(true_v, true_i, cfg, rng)
     obs_v, obs_i = _apply_meter_model(true_v, true_i, cfg, rng)
     last_gasp = _last_gasp_messages(plan, profiles.timestamps, cfg, rng)
     recorded = corrupt_connectivity(net, cfg)
@@ -156,7 +180,8 @@ def generate_dataset(cfg: SimConfig | None = None, out_dir: Path | None = None) 
         current=np.stack([dt_records[d]["current"] for d in dt_records]),
         neutral_current=np.stack([dt_records[d]["neutral_current"] for d in dt_records]),
     )
-    np.savez_compressed(out_dir / "ground_truth_voltage.npz", voltage=true_v)
+    np.savez_compressed(out_dir / "ground_truth_voltage.npz", voltage=true_v,
+                        clock_offsets=clock_offsets)
 
     meters.to_csv(out_dir / "truth_meters.csv", index=False)
     net.transformers.to_csv(out_dir / "truth_transformers.csv", index=False)
@@ -187,6 +212,8 @@ def generate_dataset(cfg: SimConfig | None = None, out_dir: Path | None = None) 
         "last_gasp_messages": int((last_gasp["message"] == "last_gasp").sum())
         if len(last_gasp) else 0,
         "reverse_flow_pct": round(float((profiles.p_kw < 0).mean() * 100), 2),
+        "clock_drifted_meters": int((clock_offsets != 0).sum()),
+        "solar_penetration_pct": round(cfg.solar_penetration * 100, 1),
         "out_dir": str(out_dir),
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))

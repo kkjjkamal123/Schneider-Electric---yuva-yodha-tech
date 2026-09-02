@@ -28,7 +28,9 @@ MAX_INTERPOLATION_STEPS = 3
 
 
 def residual_delta_voltage(voltage: np.ndarray,
-                           max_interpolation: int = MAX_INTERPOLATION_STEPS) -> np.ndarray:
+                           max_interpolation: int = MAX_INTERPOLATION_STEPS,
+                           common_mode: bool = True,
+                           difference: bool = True) -> np.ndarray:
     """Common-mode-removed voltage increments.
 
     Parameters
@@ -43,11 +45,13 @@ def residual_delta_voltage(voltage: np.ndarray,
     interpolation and any remainder set to zero (a zero increment is neutral
     for the correlation that follows).
     """
-    dv = np.diff(voltage, axis=0)
-    # Median rather than mean: an outage takes a block of meters to NaN and
-    # drags a mean around, while the median barely moves.
-    common = np.nanmedian(dv, axis=1, keepdims=True)
-    residual = dv - common
+    dv = np.diff(voltage, axis=0) if difference else voltage.copy()
+    if common_mode:
+        # Median rather than mean: an outage takes a block of meters to NaN and
+        # drags a mean around, while the median barely moves.
+        residual = dv - np.nanmedian(dv, axis=1, keepdims=True)
+    else:
+        residual = dv
 
     filled = (pd.DataFrame(residual)
               .interpolate(limit=max_interpolation, limit_direction="both")
@@ -60,6 +64,96 @@ def correlation_matrix(residual: np.ndarray) -> np.ndarray:
     """Pearson correlation between every pair of meters, NaN-safe."""
     corr = np.corrcoef(residual.T)
     return np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def usable_intervals(own_load: np.ndarray | None,
+                     hours: np.ndarray | None = None,
+                     exclude_hours: tuple[int, int] | None = None,
+                     load_quantile: float = 0.5,
+                     min_run: int = 2) -> np.ndarray:
+    """Boolean ``(n_steps, n_meters)`` mask of intervals worth correlating.
+
+    Two filters, both from the published failure modes of correlation-based
+    topology identification.
+
+    **Own-load filter.** A meter's voltage is its transformer's voltage minus
+    the drop across everything between them. Part of that drop is caused by the
+    meter's *own* current through its own service drop, and that part is pure
+    noise as far as topology is concerned. When a customer is drawing hard, the
+    private term grows and swamps the shared term, so same-phase neighbours
+    stop looking alike. Keeping only the intervals where a meter is quiet keeps
+    the shared component dominant.
+
+    **Daylight filter.** Rooftop PV imposes the same irradiance profile on
+    every generating meter in a neighbourhood whatever transformer it sits on.
+    That is a shared signal with no topological meaning, and it inflates
+    correlation between unrelated meters. Dropping the generating hours removes
+    it at the cost of roughly a third of the day.
+
+    ``min_run`` discards isolated qualifying intervals: a correlation computed
+    over scattered single samples is not meaningful.
+    """
+    if own_load is None and exclude_hours is None:
+        return None
+
+    n_steps = (own_load.shape[0] if own_load is not None
+               else len(hours))          # type: ignore[arg-type]
+    mask = np.ones((n_steps, own_load.shape[1] if own_load is not None else 1),
+                   dtype=bool)
+
+    if own_load is not None:
+        # Per-meter threshold, because a 0.5 kW threshold means something very
+        # different to a household and to a pump.
+        threshold = np.nanquantile(np.abs(own_load), load_quantile, axis=0)
+        mask &= np.abs(own_load) <= threshold[None, :]
+
+        if min_run > 1:
+            # Drop qualifying samples that are not part of a run.
+            keep = mask.copy()
+            for shift in range(1, min_run):
+                keep &= np.roll(mask, shift, axis=0) | np.roll(mask, -shift, axis=0)
+            mask = keep
+
+    if exclude_hours is not None and hours is not None:
+        lo, hi = exclude_hours
+        daylight = (hours >= lo) & (hours < hi)
+        mask &= ~daylight[:, None]
+
+    return mask
+
+
+def masked_correlation(residual: np.ndarray, mask: np.ndarray | None,
+                       min_overlap: int = 48) -> np.ndarray:
+    """Pairwise correlation computed only over intervals both meters qualify for.
+
+    Every pair gets its own sample set, which is the point: meter A being busy
+    should not cost meter B and meter C their comparison. Pairs with too little
+    overlap fall back to zero correlation rather than a number computed from a
+    handful of samples.
+    """
+    if mask is None:
+        return correlation_matrix(residual)
+
+    x = np.nan_to_num(residual, nan=0.0).astype(np.float64)
+    m = mask.astype(np.float64)
+    xm = x * m
+
+    # Pairwise sums via matrix products: n, sum(x), sum(y), sum(xy), sum(x^2).
+    n = m.T @ m
+    sx = xm.T @ m
+    sxy = xm.T @ xm
+    sxx = (xm * x).T @ m
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cov = sxy / n - (sx / n) * (sx.T / n)
+        var_x = sxx / n - (sx / n) ** 2
+        denom = np.sqrt(np.clip(var_x, 0, None) * np.clip(var_x.T, 0, None))
+        corr = cov / denom
+
+    corr = np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
+    corr[n < min_overlap] = 0.0
+    np.fill_diagonal(corr, 1.0)
+    return np.clip(corr, -1.0, 1.0)
 
 
 def correlation_distance(corr: np.ndarray) -> np.ndarray:
