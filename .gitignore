@@ -15,3 +15,6 @@ data/processed/
 Thumbs.db
 *.log
 *.pdf
+
+# built deck is regenerated from results.json
+deck/*.pptx
