@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ENTITY GRID</title>
+<meta name="description" content="Turns the smart meters India is already installing into a live map of the low-voltage grid: correct connectivity, transformers that warn before they fail, and faults located in seconds. No new hardware." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080a0f; --bg2:#0b0e15; --surf:#0f131c; --surf2:#141a26;
+  --line:#1c2231; --line2:#262d3f;
+  --ink:#eef1f7; --mid:#9aa3b8; --dim:#626c85;
+  --accent:#3b6dfa; --accent2:#7ea0ff; --ok:#39c07a; --crit:#ff5c5c; --high:#e0932f;
+  --disp:"Anton","Arial Narrow",Impact,sans-serif;
+  --body:"Archivo","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",Consolas,monospace;
+  --wrap:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.65 var(--body);
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+img,svg{max-width:100%}
+a{color:inherit}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
+h1,h2,h3{font-family:var(--disp);font-weight:400;letter-spacing:.01em;
+  text-transform:uppercase;margin:0;line-height:.98}
+p{margin:0}
+
+/* ---------- nav ---------- */
+header{position:sticky;top:0;z-index:50;background:rgba(8,10,15,.86);
+  backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+header .bar{display:flex;align-items:center;gap:28px;height:66px}
+.logo{font:400 21px/1 var(--disp);letter-spacing:.1em;text-decoration:none;white-space:nowrap}
+.logo i{color:var(--accent);font-style:normal}
+header nav{display:flex;gap:24px;margin-left:12px}
+header nav a{font-size:14px;color:var(--mid);text-decoration:none}
+header nav a:hover{color:var(--ink)}
+header .right{margin-left:auto;display:flex;gap:10px;align-items:center}
+
+.btn{display:inline-flex;align-items:center;gap:9px;padding:12px 20px;
+  font:600 14px var(--body);text-decoration:none;border:1px solid transparent;
+  cursor:pointer;transition:.16s;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#2b5bea}
+.btn-ghost{border-color:var(--line2);color:var(--ink);background:transparent}
+.btn-ghost:hover{border-color:var(--dim);background:rgba(255,255,255,.04)}
+.btn-sm{padding:9px 16px;font-size:13px}
+
+/* ---------- hero ---------- */
+.hero{position:relative;padding:92px 0 72px;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:-30% 0 auto 40%;height:760px;
+  background:radial-gradient(closest-side,rgba(59,109,250,.16),transparent 72%);
+  pointer-events:none}
+.hero .grid{display:grid;gap:56px;grid-template-columns:1fr;position:relative}
+.hero h1{font-size:clamp(42px,7.4vw,80px);margin:20px 0 0}
+.hero h1 em{font-style:normal;color:var(--accent2)}
+.hero .sub{color:var(--mid);font-size:18px;margin-top:22px;max-width:56ch}
+.hero .sub b{color:var(--ink);font-weight:600}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:32px}
+.microcopy{font:400 13px var(--mono);color:var(--dim);margin-top:14px}
+
+.visual{border:1px solid var(--line);background:var(--bg2);position:relative}
+.visual .vh{display:flex;align-items:center;gap:8px;padding:10px 14px;
+  border-bottom:1px solid var(--line);background:var(--surf)}
+.visual .vh b{font:500 10.5px var(--mono);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--dim);font-weight:500}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 0 0 rgba(57,192,122,.6);animation:pulse 2.4s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 9px rgba(57,192,122,0)}100%{box-shadow:0 0 0 0 rgba(57,192,122,0)}}
+
+/* ---------- strip ---------- */
+.strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  background:var(--bg2);padding:26px 0}
+.strip .row{display:flex;gap:14px 40px;flex-wrap:wrap;align-items:center}
+.strip .lbl{font:500 11px var(--mono);letter-spacing:.18em;text-transform:uppercase;
+  color:var(--dim);margin-right:8px}
+.strip .item{font:500 13px var(--mono);color:var(--mid);letter-spacing:.04em}
+.strip .item b{color:var(--ink);font-weight:500}
+
+/* ---------- sections ---------- */
+section{padding:96px 0}
+.shead{margin-bottom:44px;max-width:70ch}
+.shead h2{font-size:clamp(30px,4.4vw,50px);margin:14px 0 0}
+.shead p{color:var(--mid);margin-top:18px;font-size:16.5px}
+
+.three{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  grid-template-columns:1fr}
+.cell{background:var(--bg2);padding:32px 28px}
+.cell .n{font:400 13px var(--mono);color:var(--accent);letter-spacing:.16em}
+.cell h3{font-size:26px;margin:16px 0 12px}
+.cell p{color:var(--mid);font-size:15px}
+.cell .stat{margin-top:20px;padding-top:18px;border-top:1px solid var(--line);
+  font:500 12.5px var(--mono);color:var(--dim)}
+.cell .stat b{color:var(--ok);font-weight:500}
+
+.steps{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  grid-template-columns:1fr}
+.step{background:var(--bg2);padding:30px 28px;display:flex;gap:22px;align-items:flex-start}
+.step .big{font:400 54px/.85 var(--disp);color:var(--line2);min-width:64px}
+.step h3{font-size:21px;margin-bottom:9px}
+.step p{color:var(--mid);font-size:14.5px}
+
+.feats{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  grid-template-columns:1fr}
+.feat{background:var(--bg2);padding:24px}
+.feat h4{margin:0 0 8px;font:600 15px var(--body)}
+.feat p{color:var(--mid);font-size:14px}
+.feat .k{font:500 10.5px var(--mono);letter-spacing:.15em;text-transform:uppercase;
+  color:var(--accent);margin-bottom:12px}
+
+/* ---------- evidence ---------- */
+.evidence{border:1px solid var(--line2);background:
+  linear-gradient(140deg,rgba(59,109,250,.09),transparent 58%),var(--bg2);padding:44px 38px}
+.evidence blockquote{margin:0;font:400 clamp(21px,2.7vw,30px)/1.42 var(--body);
+  color:var(--ink);max-width:60ch}
+.evidence blockquote b{color:var(--accent2);font-weight:600}
+.evidence .attr{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);
+  font:400 13px var(--mono);color:var(--dim);max-width:76ch;line-height:1.7}
+.numbers{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  grid-template-columns:repeat(2,1fr);margin-top:36px}
+.num{background:var(--bg2);padding:24px}
+.num .v{font:400 44px/1 var(--disp);color:var(--accent2)}
+.num .v.ok{color:var(--ok)}
+.num .k{font:500 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim);margin-top:12px}
+.num .s{font-size:13px;color:var(--mid);margin-top:6px}
+
+/* ---------- pilot ---------- */
+.tiers{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  grid-template-columns:1fr}
+.tier{background:var(--bg2);padding:30px 28px;position:relative}
+.tier.mark{background:var(--surf);border-top:2px solid var(--accent)}
+.tier .badge{position:absolute;top:-1px;right:20px;background:var(--accent);color:#fff;
+  font:600 10px var(--mono);letter-spacing:.14em;padding:4px 10px;text-transform:uppercase}
+.tier h3{font-size:22px}
+.tier .price{font:400 34px/1 var(--disp);margin:14px 0 4px}
+.tier .price small{font:400 13px var(--mono);color:var(--dim);letter-spacing:.06em}
+.tier ul{list-style:none;padding:0;margin:20px 0 0}
+.tier li{font-size:14.5px;color:var(--mid);padding:7px 0 7px 22px;position:relative}
+.tier li::before{content:"→";position:absolute;left:0;color:var(--accent);font-size:13px}
+
+/* ---------- faq ---------- */
+details{border:1px solid var(--line);background:var(--bg2);margin-bottom:1px}
+details[open]{background:var(--surf)}
+summary{padding:20px 24px;cursor:pointer;font:600 16px var(--body);list-style:none;
+  display:flex;align-items:center;gap:16px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";margin-left:auto;color:var(--accent);font:400 22px var(--mono)}
+details[open] summary::after{content:"–"}
+summary:hover{color:var(--accent2)}
+details .ans{padding:0 24px 22px 24px;color:var(--mid);font-size:15px;max-width:82ch}
+details .ans code{font:400 13px var(--mono);color:var(--accent2);
+  background:rgba(59,109,250,.1);padding:2px 6px}
+
+/* ---------- close ---------- */
+.close{text-align:center;padding:110px 0;border-top:1px solid var(--line);
+  background:radial-gradient(700px 320px at 50% 0,rgba(59,109,250,.13),transparent 70%)}
+.close h2{font-size:clamp(34px,5.6vw,64px)}
+.close p{color:var(--mid);max-width:56ch;margin:22px auto 0;font-size:17px}
+.close .cta-row{justify-content:center}
+footer{border-top:1px solid var(--line);padding:34px 0;background:var(--bg2)}
+footer .row{display:flex;gap:12px 34px;flex-wrap:wrap;align-items:center;
+  font:400 12.5px var(--mono);color:var(--dim)}
+
+@media(min-width:760px){
+  .three,.feats{grid-template-columns:repeat(3,1fr)}
+  .numbers{grid-template-columns:repeat(4,1fr)}
+  .tiers{grid-template-columns:repeat(3,1fr)}
+}
+@media(min-width:1000px){
+  .hero .grid{grid-template-columns:1.02fr .98fr;align-items:center;gap:64px}
+  .feats{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:759px){
+  header nav{display:none}
+  section{padding:68px 0}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="logo" href="#top">ENTITY<i>GRID</i></a>
+    <nav>
+      <a href="#problem">Problem</a>
+      <a href="#how">How it works</a>
+      <a href="#proof">Evidence</a>
+      <a href="#pilot">Pilot</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="right">
+      <a class="btn btn-ghost btn-sm" href="#how">See the method</a>
+      <a class="btn btn-primary btn-sm" href="dashboard.html">Open the live console</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="wrap grid">
+    <div>
+      <span class="eyebrow">Yuva Yodha Energy Tech Hackathon 2026 · Grid Reliability</span>
+      <h1>Your grid ends<br>where your <em>map</em><br>stops being true.</h1>
+      <p class="sub">You cannot forecast a feeder, dispatch demand response or site a
+        community battery on a network nobody has mapped. And roughly
+        <b>one consumer in three is booked to the wrong transformer or phase</b>.
+        ENTITY GRID learns the real map from the smart meters already going in, then uses it
+        to make the neighbourhood dependable: per phase forecasts, targeted demand response,
+        storage sized from the forecast. <b>No new hardware. No site survey. No capex.</b></p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="dashboard.html">Open the live console →</a>
+        <a class="btn btn-ghost" href="#how">See how it works</a>
+      </div>
+      <p class="microcopy">Runs on RDSS meter data · 486 consumers · 12 transformers · validated end to end</p>
+    </div>
+
+    <div class="visual">
+      <div class="vh"><span class="dot"></span><b>learned network · live</b></div>
+      <svg viewBox="0 0 520 340" role="img" aria-label="Diagram of a transformer with consumer meters grouped by phase and electrical depth">
+        <defs>
+          <radialGradient id="g" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#3b6dfa" stop-opacity=".35"/>
+            <stop offset="100%" stop-color="#3b6dfa" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <circle cx="260" cy="172" r="120" fill="url(#g)"/>
+        <g id="fan"></g>
+        <circle cx="260" cy="172" r="23" fill="#0f131c" stroke="#3b6dfa" stroke-width="2"/>
+        <text x="260" y="177" text-anchor="middle" fill="#eef1f7"
+          font-family="IBM Plex Mono,monospace" font-size="12" font-weight="500">DT</text>
+        <text x="260" y="322" text-anchor="middle" fill="#626c85"
+          font-family="IBM Plex Mono,monospace" font-size="10.5">radius = electrical depth · colour = phase</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ================= STRIP ================= -->
+<div class="strip">
+  <div class="wrap row">
+    <span class="lbl">Built on what already exists</span>
+    <span class="item"><b>RDSS</b> smart-meter rollout</span>
+    <span class="item"><b>DLMS/COSEM</b> meter profiles</span>
+    <span class="item"><b>IS 16444</b> last-gasp</span>
+    <span class="item"><b>CEA</b> ±6% voltage limits</span>
+    <span class="item"><b>IEEE 1547</b> volt-var</span>
+    <span class="item"><b>CIM / IEC 61968</b> ADMS integration</span>
+  </div>
+</div>
+
+<!-- ================= PROBLEM / VALUE ================= -->
+<section id="problem">
+  <div class="wrap">
+    <div class="shead">
+      <span class="eyebrow">What it kills</span>
+      <h2>Three failures,<br>one missing map.</h2>
+      <p>Every low-voltage problem a DISCOM has traces back to the same gap: nobody knows
+        what is actually connected to what. Fix the map and the rest follows.</p>
+    </div>
+
+    <div class="three">
+      <div class="cell">
+        <div class="n">01</div>
+        <h3>Stop billing<br>the wrong feeder</h3>
+        <p>Loss accounting, load balancing and every outage decision inherit the ledger's
+          errors. ENTITY GRID rebuilds meter-to-transformer-to-phase connectivity from
+          voltage alone, then hands you a ranked list of exactly which records are wrong.</p>
+        <div class="stat">Ledger 69.1% correct → <b>100.0% recovered</b>, 150 corrections</div>
+      </div>
+      <div class="cell">
+        <div class="n">02</div>
+        <h3>Replace it<br>on a Tuesday</h3>
+        <p>A transformer that fails at 2 a.m. in June costs overtime, a burnt-out
+          neighbourhood and a week of complaints. Impedance drift shows up days earlier. If something is watching each asset against its own baseline.</p>
+        <div class="stat">3 of 3 failing units caught · <b>9 days mean warning</b> · 0 false alarms</div>
+      </div>
+      <div class="cell">
+        <div class="n">03</div>
+        <h3>Stop driving<br>the line</h3>
+        <p>When a feeder trips, meters fire a last-gasp message before they die. Clustered
+          onto the learned network, that burst names the faulted section and the last
+          consumer still lit. The two ends of the span a crew has to walk.</p>
+        <div class="stat">6 of 6 faults located · <b>~1 second</b> from first message</div>
+      </div>
+      <div class="cell">
+        <div class="n">04</div>
+        <h3>Aim flexibility<br>at the right street</h3>
+        <p>Forecast every phase of every transformer a day ahead, find where the
+          neighbourhood runs out of room, then call only the consumers on that transformer
+          and that phase who actually have load worth moving. Size a community battery from
+          the same forecast rather than a rule of thumb.</p>
+        <div class="stat">Deferrable consumers found at <b>5x the base rate</b>, from load shape alone</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= HOW ================= -->
+<section id="how" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="shead">
+      <span class="eyebrow">How it works</span>
+      <h2>Three steps,<br>zero new sensors.</h2>
+      <p>The meters are already there and already reporting voltage every fifteen minutes
+        for billing. That data carries the shape of the network. It has simply never been
+        read that way.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="big">01</div>
+        <div>
+          <h3>Strip the noise that hides the network</h3>
+          <p>Raw meter voltage is dominated by the substation's own swing, which every
+            consumer sees at once. Working on voltage <em>increments</em> and subtracting the
+            cross-sectional median removes that shared component. What survives is the local
+            drop across the impedance a meter shares with its transformer. The topology
+            signal.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="big">02</div>
+        <div>
+          <h3>Let the network cluster itself</h3>
+          <p>Meters on the same phase conductor share its voltage drop almost exactly, so
+            they correlate at 0.81 while unrelated meters sit near zero. Clustering recovers
+            the transformer-and-phase groups perfectly; matching each group against busbar
+            telemetry labels it with a real asset ID. Usable after two days of data.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="big">03</div>
+        <div>
+          <h3>Read condition, and faults, off the same signal</h3>
+          <p>With a correct map, the physics becomes legible: estimated impedance per
+            transformer and per segment, tracked against each asset's own baseline. Rising
+            neutral impedance is a corroding joint. A last-gasp burst is a located fault.
+            Midday overvoltage with export is reverse power flow. Answered with reactive
+            setpoints before curtailment.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="big">04</div>
+        <div>
+          <h3>Turn the map into flexibility</h3>
+          <p>With connectivity known, every phase of every transformer gets a day ahead net
+            load forecast, built from calendar position, its own recent history and a
+            purchased irradiance forecast that is deliberately degraded to the accuracy a
+            utility would really buy. Where the forecast breaches a thermal or voltage limit,
+            the system picks the consumers who can actually help, on the phase that is
+            actually in trouble, and sizes storage for whatever demand response cannot
+            cover.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FEATURES ================= -->
+<section>
+  <div class="wrap">
+    <div class="shead">
+      <span class="eyebrow">What is inside</span>
+      <h2>Engineering,<br>not a black box.</h2>
+      <p>Every output is an impedance in ohms, a named consumer, or a bracketed span of
+        line. A distribution engineer can argue with all of it. Which is the only way a
+        control room ever comes to trust it.</p>
+    </div>
+
+    <div class="feats">
+      <div class="feat"><div class="k">Physics</div>
+        <h4>Four-wire power flow</h4>
+        <p>Backward/forward sweep solving all three phases plus neutral, exact for radial LV
+          and stable at the high R/X ratios where Newton-Raphson struggles.</p></div>
+      <div class="feat"><div class="k">Topology</div>
+        <h4>Self-learning connectivity</h4>
+        <p>Meter → transformer → phase inferred from voltage correlation, with a confidence
+          score and an explicit field-check list for the cases it is unsure about.</p></div>
+      <div class="feat"><div class="k">Health</div>
+        <h4>Per-asset baselines</h4>
+        <p>No fleet-wide thresholds. A 63 kVA rural unit and a 250 kVA urban one are judged
+          against themselves, so neither is missed nor cried wolf over.</p></div>
+      <div class="feat"><div class="k">Health</div>
+        <h4>Segment-level detection</h4>
+        <p>A bad joint with three consumers behind it moves the transformer average by
+          nothing. A second pass at meter level catches it and names the group.</p></div>
+      <div class="feat"><div class="k">Outage</div>
+        <h4>Depth-bracketed faults</h4>
+        <p>Electrical depth estimated per consumer, so a fault is bounded between the
+          deepest lit meter and the shallowest dark one. In ohms from the transformer.</p></div>
+      <div class="feat"><div class="k">Solar</div>
+        <h4>Reverse-flow separation</h4>
+        <p>Overvoltage coincident with PV export is distinguished from load-driven sag, and
+          vars are allocated to the deepest inverters where they buy the most volts.</p></div>
+      <div class="feat"><div class="k">Honesty</div>
+        <h4>Unassessable is reported</h4>
+        <p>Indicators whose noise exceeds their signal are surfaced as unmeasurable, never
+          quietly passed as healthy. Silent gaps are how monitoring loses trust.</p></div>
+      <div class="feat"><div class="k">Edge</div>
+        <h4>Built for 2G backhaul</h4>
+        <p>Inference belongs at the DT gateway with anomalies uplinked, not a firehose to
+          the cloud. Because rural comms will not carry a firehose.</p></div>
+      <div class="feat"><div class="k">Forecast</div>
+        <h4>Per phase, not per transformer</h4>
+        <p>A feeder is rarely in trouble as a whole. One phase overloads while another idles,
+          and a forecast that sums the three together cannot see the problem worth acting
+          on.</p></div>
+      <div class="feat"><div class="k">Flexibility</div>
+        <h4>Deferrable load inferred, not asked</h4>
+        <p>Nobody knows which consumers can shift load. Pumping looks unmistakable in
+          interval data: long runs, high peaks, mostly at night. Scored from shape alone,
+          never from a tariff category.</p></div>
+      <div class="feat"><div class="k">Storage</div>
+        <h4>Sized from the forecast</h4>
+        <p>Power set by the largest predicted deficit, energy by the largest deficit area,
+          charging from the midday export the same feeder is already spilling.</p></div>
+      <div class="feat"><div class="k">Integration</div>
+        <h4>Feeds ADMS and DERMS</h4>
+        <p>Designed as the low voltage layer beneath an existing EcoStruxure Grid, ADMS or
+          DERMS deployment. Both assume a network model that Indian LV does not have.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= EVIDENCE ================= -->
+<section id="proof" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="shead">
+      <span class="eyebrow">Evidence</span>
+      <h2>Graded against<br>a known answer.</h2>
+      <p>This is a hackathon entry, so it is validated the only honest way available: against
+        a simulated network whose true connectivity, degradation and faults are known
+        exactly. And which no model is allowed to read.</p>
+    </div>
+
+    <div class="evidence">
+      <blockquote>The utility ledger had <b>150 consumers on the wrong transformer or
+        phase</b>. ENTITY GRID found every one of them from voltage data alone, without a
+        single site visit. The obvious method, plain correlation, scores
+        <b>below the ledger it was replacing</b>.</blockquote>
+      <p class="attr">Result from the reference run in this repository, 486 consumers across
+        12 transformers, 15-minute interval data. Ground truth is used only for scoring; a
+        test in the suite fails the build if the topology learner so much as opens a truth
+        file. Field accuracy on live AMI data will be lower than a simulation, which is why
+        the sensitivity sweep. Accuracy against observation window and against missing-read
+        rate. Ships alongside the result rather than being left out of the pitch.</p>
+    </div>
+
+    <div class="numbers">
+      <div class="num"><div class="v ok">100%</div><div class="k">Connectivity</div>
+        <div class="s">against a 69.1% ledger baseline</div></div>
+      <div class="num"><div class="v ok">3/3</div><div class="k">Failures caught</div>
+        <div class="s">9 days mean warning, no false alarms</div></div>
+      <div class="num"><div class="v ok">6/6</div><div class="k">Faults located</div>
+        <div class="s">100% precision, ~1s detection</div></div>
+      <div class="num"><div class="v">2 days</div><div class="k">Cold start</div>
+        <div class="s">98% after a single day of data</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PILOT ================= -->
+<section id="pilot">
+  <div class="wrap">
+    <div class="shead">
+      <span class="eyebrow">Deployment path</span>
+      <h2>Start on one<br>feeder. Prove it.</h2>
+      <p>There is no price list. This is a hackathon build, not a product on sale. What
+        follows is the honest sequence for getting it from this repository into a control
+        room, and what each stage would actually need.</p>
+    </div>
+
+    <div class="tiers">
+      <div class="tier">
+        <h3>Bench</h3>
+        <div class="price">Today<br><small>this repository</small></div>
+        <ul>
+          <li>Full simulation and pipeline, one command</li>
+          <li>Live operator console</li>
+          <li>Sensitivity sweep and test suite</li>
+          <li>Runs on a laptop in under a minute</li>
+        </ul>
+      </div>
+      <div class="tier mark">
+        <span class="badge">Next step</span>
+        <h3>Pilot</h3>
+        <div class="price">1 DISCOM<br><small>50 transformers · 8 weeks</small></div>
+        <ul>
+          <li>Historical AMI export, read-only</li>
+          <li>Connectivity corrections field-verified by crews</li>
+          <li>Health baselines established over 30 days</li>
+          <li>Measured against real SAIDI/SAIFI and DT failure records</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <h3>Scale</h3>
+        <div class="price">State-wide<br><small>edge + ADMS integration</small></div>
+        <ul>
+          <li>Inference at the DT gateway, anomalies uplinked</li>
+          <li>CIM interface into existing ADMS</li>
+          <li>Volt-var setpoints to smart inverters and OLTC</li>
+          <li>Same software, no new field hardware</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FAQ ================= -->
+<section id="faq" style="background:var(--bg2);border-top:1px solid var(--line)">
+  <div class="wrap">
+    <div class="shead">
+      <span class="eyebrow">Questions we expect</span>
+      <h2>The hard ones,<br>answered first.</h2>
+    </div>
+
+    <details open><summary>Does this need new meters, sensors or gateways?</summary>
+      <div class="ans">No. It consumes interval voltage and current that RDSS-compliant
+        meters already report for billing, plus the transformer-level telemetry those
+        programmes already mandate. The entire contribution is software. That is the point. Anything requiring field hardware dies on capex approval.</div></details>
+
+    <details><summary>How is this different from an outage management system we could buy?</summary>
+      <div class="ans">Conventional OMS assumes an accurate network model and instrumented
+        MV feeders. Indian LV networks have neither. Which is why those deployments
+        underperform here. ENTITY GRID treats topology as something to be <em>learned</em>
+        rather than assumed, and is built to feed an existing ADMS rather than replace it.</div></details>
+
+    <details><summary>Is 100% connectivity accuracy realistic?</summary>
+      <div class="ans">On this simulation, yes; in the field, expect less. The number is real
+        but it comes from synthetic data, and we say so everywhere it appears. What travels
+        to the field is the <em>method</em> and its degradation curve: still 99% with 15% of
+        reads missing, falling to 88% at 30% missing, and 97% on a single day of data.
+        Those numbers matter more than the headline.</div></details>
+
+    <details><summary>What happens when meters do not report?</summary>
+      <div class="ans">Short gaps are interpolated, longer ones left as gaps and excluded
+        from the correlation rather than invented. Fault recall is explicitly capped by the
+        roughly 14% of last-gasp messages lost to RF collisions during a mass outage. Precision stays at 100%, because a meter that reported dark really was dark.</div></details>
+
+    <details><summary>Can it tell a failing transformer from a merely overloaded one?</summary>
+      <div class="ans">Yes, because it tracks <em>impedance</em>, not load. Overload raises
+        current and drops voltage without changing the ohms between busbar and consumer.
+        Degradation raises those ohms. Separate estimates are kept for the transformer
+        winding, the phase conductor and the neutral, and the three fail in different ways.</div></details>
+
+    <details><summary>How does this answer a challenge about intermittency and storage?</summary>
+      <div class="ans">By making the rest of it aimable. Forecasting, demand response and
+        shared storage all need to know which consumers sit behind which transformer and
+        phase, and that is exactly the record that is wrong a third of the time. ENTITY GRID
+        recovers it, then builds the flexibility layer on top: per phase day ahead forecasts
+        at 13% better than the best free baseline, predicted constraint windows, call lists
+        filtered to the phase in trouble, and storage sized from the forecast.</div></details>
+
+    <details><summary>Did anything you tried not work?</summary>
+      <div class="ans">Two things, both still in the repository. A cumulative sum control
+        chart is the textbook detector for slow degradation and is what the published work
+        uses; on this data it raised eight false alarms to catch one real fault, against zero
+        false alarms for the trend test that ships. Restricting correlation to low load
+        intervals, which the literature reports as a clear improvement, gained about three
+        points under clock drift and lost ground everywhere else, so it is available and off
+        by default. Both comparisons are on the Evidence tab of the console.</div></details>
+
+    <details><summary>Where does it admit it cannot help?</summary>
+      <div class="ans">Busbar-referenced winding detection fails on a feeder whose MV source
+        drifts. The reference moves as much as the asset. So those indicators are reported
+        as <code>unassessable</code> rather than passed as healthy. Feeder-wide faults sitting
+        right at the busbar defeat the peer-comparison detector, which is why the
+        transformer-level neutral indicator exists alongside it. Both limits are visible in
+        the console.</div></details>
+  </div>
+</section>
+
+<!-- ================= CLOSE ================= -->
+<section class="close">
+  <div class="wrap">
+    <span class="eyebrow">250 million meters are going in either way</span>
+    <h2>The sensors are<br>already there.</h2>
+    <p>Nobody is listening to them. Open the console and see what thirty days of ordinary
+      billing data already knows about the grid.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="dashboard.html">Open the live console →</a>
+      <a class="btn btn-ghost" href="#proof">Read the evidence</a>
+    </div>
+    <p class="microcopy">No sign-up. It runs locally against the generated dataset</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap row">
+    <span class="logo" style="font-size:16px">ENTITY<i>GRID</i></span>
+    <span>Yuva Yodha Energy Tech Hackathon 2026</span>
+    <span>Challenge: Grid Reliability</span>
+    <span style="margin-left:auto">Validated on simulated data · method and limits published</span>
+  </div>
+</footer>
+
+<script>
+// Hero diagram: consumers fanned by phase and electrical depth, drawn from the
+// same layout rule the live console uses.
+(function(){
+  const fan=document.getElementById("fan"); if(!fan)return;
+  const CX=260,CY=172,COL=["#3b6dfa","#e0932f","#39c07a"];
+  let out="";
+  for(let ph=0;ph<3;ph++){
+    const n=13;
+    for(let i=0;i<n;i++){
+      const a=(ph*120-90+((i/(n-1))-0.5)*84)*Math.PI/180;
+      const r=34+96*(0.22+0.78*(i/(n-1)));
+      const x=CX+Math.cos(a)*r, y=CY+Math.sin(a)*r;
+      out+=`<line x1="${CX}" y1="${CY}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"
+        stroke="${COL[ph]}" stroke-width=".6" opacity=".3"/>`;
+      out+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${COL[ph]}"
+        opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".4s"
+        begin="${(0.25+(ph*n+i)*0.022).toFixed(2)}s" fill="freeze"/></circle>`;
+    }
+  }
+  fan.innerHTML=out;
+})();
+</script>
+</body>
+</html>
