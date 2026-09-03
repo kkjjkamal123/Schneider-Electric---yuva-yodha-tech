@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -244,6 +243,26 @@ def benchmarks() -> dict:
     return out
 
 
+@app.get("/api/series")
+def series() -> dict:
+    """Time series behind the headline numbers, for charting."""
+    payload = results()
+    return {
+        "forecast_samples": payload.get("forecast_samples", []),
+        "health_trajectories": payload.get("health_trajectories", {}),
+        "network_daily": payload.get("network_daily", []),
+    }
+
+
+@app.get("/api/scenarios")
+def scenarios() -> list[dict]:
+    """The same feeders at rising rooftop solar penetration."""
+    path = PROCESSED_DIR / "pv_scenarios.csv"
+    if not path.exists():
+        return []
+    return _clean(pd.read_csv(path))
+
+
 @app.get("/api/network/graph")
 def network_graph() -> dict:
     """Electrical schematic of the learned network.
@@ -285,12 +304,22 @@ def network_graph() -> dict:
     }
 
 
+# Both pages are edited while the server is running, and a browser that
+# honours ETag will happily show a demo audience yesterday's build. These are
+# small hand-written files, so revalidation costs nothing worth saving.
+NO_CACHE = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
 @app.get("/dashboard")
 def dashboard():
     """The operator console."""
     if not DASHBOARD.exists():
         return JSONResponse({"message": "ENTITY GRID API running", "docs": "/docs"})
-    return FileResponse(DASHBOARD)
+    return FileResponse(DASHBOARD, headers=NO_CACHE)
 
 
 @app.get("/")
@@ -298,4 +327,4 @@ def landing():
     """Public-facing page; the console lives at /dashboard."""
     if not LANDING.exists():
         return dashboard()
-    return FileResponse(LANDING)
+    return FileResponse(LANDING, headers=NO_CACHE)

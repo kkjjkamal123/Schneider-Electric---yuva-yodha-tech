@@ -69,11 +69,6 @@ class ConstraintWindow:
     evidence: str = ""
     intervals: int = 0
 
-    @property
-    def duration_hours(self) -> float:
-        return (self.end - self.start).total_seconds() / 3600.0
-
-
 @dataclass
 class VoltageModel:
     """Empirical map from per-phase loading to the worst-served voltage."""

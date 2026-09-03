@@ -58,18 +58,6 @@ class ForecastResult:
         return self.metrics.get("skill_vs_best_baseline", 0.0)
 
 
-def aggregate_to_transformer(net_p_kw: np.ndarray, meter_ids: np.ndarray,
-                             assignments: pd.DataFrame) -> pd.DataFrame:
-    """Sum consumer net power onto each transformer using learned connectivity."""
-    index = {str(m): i for i, m in enumerate(meter_ids)}
-    columns: dict[str, np.ndarray] = {}
-    for dt_id, block in assignments.groupby("inferred_dt_id"):
-        cols = [index[m] for m in block["meter_id"] if m in index]
-        if cols:
-            columns[str(dt_id)] = net_p_kw[:, cols].sum(axis=1)
-    return pd.DataFrame(columns)
-
-
 def aggregate_to_phase(net_p_kw: np.ndarray, meter_ids: np.ndarray,
                        assignments: pd.DataFrame) -> pd.DataFrame:
     """Sum consumer net power onto each (transformer, phase) pair.

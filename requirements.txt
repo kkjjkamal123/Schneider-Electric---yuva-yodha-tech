@@ -1,11 +1,10 @@
-# ENTITY GRID - runtime and development dependencies.
-# Deliberately small: the power flow, the topology learner and the health
-# detectors are all implemented directly rather than pulled in as libraries.
+# ENTITY GRID runtime and development dependencies.
+# Deliberately small: the power flow, the topology learner, the alignment
+# search and the degradation detectors are all implemented directly rather
+# than pulled in as libraries.
 numpy>=1.26
 pandas>=2.2
-scipy>=1.11
 scikit-learn>=1.4
-networkx>=3.2
 fastapi>=0.110
 uvicorn[standard]>=0.29
 

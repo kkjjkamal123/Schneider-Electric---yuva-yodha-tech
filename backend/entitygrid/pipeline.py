@@ -2,11 +2,12 @@
 
 Run as ``python -m entitygrid.pipeline``.
 
-The order matters and is not arbitrary. Topology is learned first because
-everything downstream is expressed in terms of it: health aggregates meters to
-the transformer it *found*, fault localisation brackets faults using depths
-measured along the connectivity it *found*, and volt-var targets the phase it
-*found*. Feeding those stages the utility's own ledger instead would push a
+Five pillars, and the order is not arbitrary. Timestamps are aligned, then
+topology is learned, and everything downstream is expressed in terms of what
+that learner found: health aggregates meters to the transformer it found, fault
+localisation brackets faults along the connectivity it found, volt-var targets
+the phase it found, and the flexibility layer forecasts, sheds and stores
+against it. Feeding those stages the utility's own ledger instead would push a
 30% connectivity error rate straight into every result.
 
 Outputs land in ``data/processed`` as JSON and CSV, which the API serves and
@@ -159,14 +160,64 @@ def run(ds: Dataset | None = None, out_dir: Path | None = None) -> dict:
         precisions.append(len(found & truth_set) / max(len(found), 1))
         lags.append((fault.detected_at - ds.step_time(best["start_step"])).total_seconds())
 
-    lead_times = []
+    # A detection after the asset would already have failed is a post-mortem,
+    # not a warning, and averaging it into the lead time hides that. The two
+    # outcomes are counted separately.
+    lead_times, found_late = [], []
     for dt_id in degrading:
         event = next(d for d in ds.truth_events["degradations"] if d["dt_id"] == dt_id)
         fail_day = event["failure_step"] // ds.steps_per_day
         onsets = ([a.day for a in alerts if a.dt_id == dt_id]
                   + [s.onset_day for s in segments if s.dt_id == dt_id])
-        if onsets:
-            lead_times.append(fail_day - min(onsets))
+        if not onsets:
+            continue
+        lead = fail_day - min(onsets)
+        (lead_times if lead >= 0 else found_late).append(lead)
+
+    # A few forecast series kept in full so the dashboard can show the model
+    # against reality rather than only quoting an error statistic. The best and
+    # worst performers are both included, deliberately.
+    ranked = forecast_table.sort_values("skill_vs_best_baseline", ascending=False)
+    sample_keys = list(ranked["dt_id"].head(2)) + list(ranked["dt_id"].tail(1))
+    forecast_samples = []
+    for key in dict.fromkeys(sample_keys):
+        result = forecasts.get(key)
+        if result is None:
+            continue
+        span = slice(0, min(len(result.actual), 4 * ds.steps_per_day))
+        forecast_samples.append({
+            "key": key,
+            "skill": float(result.metrics.get("skill_vs_best_baseline", 0.0)),
+            "nmae_pct": float(result.metrics.get("nmae_pct", 0.0)),
+            "timestamps": [t.isoformat() for t in result.timestamps[span]],
+            "actual": [round(float(v), 3) for v in result.actual[span]],
+            "predicted": [round(float(v), 3) for v in result.predicted[span]],
+            "baseline": [None if not np.isfinite(v) else round(float(v), 3)
+                         for v in result.baselines["yesterday"][span]],
+        })
+
+    # Per-transformer condition trajectories, for sparklines in the fleet table.
+    trajectories = {}
+    for dt_id, block in features.groupby("dt_id"):
+        block = block.sort_values("day")
+        trajectories[str(dt_id)] = {
+            "day": [int(d) for d in block["day"]],
+            "neutral_impedance": [None if not np.isfinite(v) else round(float(v), 5)
+                                  for v in block["neutral_impedance"]],
+            "loading_pct": [None if not np.isfinite(v) else round(float(v), 1)
+                            for v in block["loading_pct"]],
+            "min_meter_voltage": [None if not np.isfinite(v) else round(float(v), 1)
+                                  for v in block["min_meter_voltage"]],
+        }
+
+    # Network-wide daily envelope: what the worst and best served consumers saw.
+    daily = features.groupby("day").agg(
+        worst_voltage=("min_meter_voltage", "min"),
+        mean_worst_voltage=("min_meter_voltage", "mean"),
+        peak_loading=("loading_pct", "max"),
+        mean_loading=("loading_pct", "mean"),
+    ).reset_index()
+    network_daily = _json_safe(daily.to_dict(orient="records"))
 
     solved = [p for p in dr_plans if p.solved]
     scorecard = {
@@ -193,6 +244,8 @@ def run(ds: Dataset | None = None, out_dir: Path | None = None) -> dict:
         "health": {
             "degrading_transformers": sorted(degrading),
             "detected": sorted(degrading & flagged_dts),
+            "detected_in_time": len(lead_times),
+            "found_too_late": len(found_late),
             "missed": sorted(degrading - flagged_dts),
             "false_positive_transformers": sorted(flagged_dts - degrading),
             "mean_lead_days": float(np.mean(lead_times)) if lead_times else None,
@@ -238,6 +291,9 @@ def run(ds: Dataset | None = None, out_dir: Path | None = None) -> dict:
         "dr_plans": [_json_safe(asdict(p)) for p in dr_plans[:100]],
         "storage": [_json_safe(asdict(p)) for p in storage_plans],
         "forecast_skill": _json_safe(forecast_table.to_dict(orient="records")),
+        "forecast_samples": forecast_samples,
+        "health_trajectories": trajectories,
+        "network_daily": network_daily,
         "meta": {
             "meters": int(len(ds.meter_ids)),
             "transformers": int(len(ds.dt_ids)),
@@ -260,9 +316,12 @@ def main() -> None:
           f"vs ledger {t['ledger_joint_accuracy']:.1%} "
           f"({t['corrections_found']} records corrected)")
     h = s["health"]
-    print(f"Health     detected {len(h['detected'])}/{len(h['degrading_transformers'])} "
-          f"degrading DTs, {len(h['false_positive_transformers'])} false positives, "
-          f"mean lead {h['mean_lead_days']:.0f} days")
+    late = f", {h['found_too_late']} only after failure" if h["found_too_late"] else ""
+    lead = f"{h['mean_lead_days']:.0f}" if h["mean_lead_days"] is not None else "n/a"
+    print(f"Health     flagged {len(h['detected'])}/{len(h['degrading_transformers'])} "
+          f"degrading DTs, {h['detected_in_time']} in time{late}, "
+          f"{len(h['false_positive_transformers'])} false positives, "
+          f"mean lead {lead} days")
     f = s["faults"]
     print(f"Faults     {f['detected']}/{f['truth_events']} located, "
           f"recall {f['mean_recall']:.0%}, precision {f['mean_precision']:.0%}, "

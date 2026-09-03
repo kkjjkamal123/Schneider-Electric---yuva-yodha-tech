@@ -47,6 +47,7 @@ The two head to head comparisons take longer and are not part of the normal run:
 ```bash
 python -m entitygrid.topology.benchmark  # 5 methods over 7 stress scenarios
 python -m entitygrid.health.benchmark    # 3 degradation detectors
+python -m entitygrid.flex.scenario       # the same feeders at 22 to 80 percent solar
 ```
 
 ## What ENTITY GRID is
@@ -92,13 +93,15 @@ Every number below is graded against ground truth that the models never see. A t
 | **Connectivity goes from 69.1% to 100%** | 486 consumers on 12 transformers, 30 days of 15 minute data. The utility ledger has 150 records wrong. All 150 are found and corrected, transformer and phase, from voltage alone. | Synthetic data. Published field results for meter to transformer mapping sit around 80%, and phase identification on real Irish AMI data reports about 93%. Expect the field number to land nearer those than mine. |
 | **It is usable after two days** | Full accuracy from day two, 97.9% from a single day. The sensitivity sweep runs the whole learner again at 1, 2, 3, 5, 7, 14 and 30 days. | A cold start still needs those two days. Health baselines need seven before any alert is credible. |
 | **It survives losing reads** | 99.0% joint accuracy with an extra 15% of reads blanked at random, 94.4% at 30%. | Blanking is uniform random. Real AMI loses reads in correlated bursts, which is harder. |
-| **All three degrading transformers caught, no false alarms** | Mean 9 days of warning before the modelled failure point. Zero healthy transformers flagged. | Three degradation events, all of them neutral joint failures. No winding failure appears in this dataset, so that path is exercised but not proven. |
-| **Segment detection finds what the transformer average hides** | One of the three faults has only 2 consumers of 45 downstream. It is invisible at transformer level and the meter level pass still finds it, 4 days ahead. | 28 of 486 meters are flagged. Within a flagged group, purity varies. The transformer attribution is right every time; the exact member list is not always. |
+| **All three degrading transformers flagged, no false alarms** | Two are caught before failure, mean 4 days of warning. Zero healthy transformers flagged, out of twelve. | The third is flagged four days *after* it would have failed. Two consumers behind a lateral do not generate enough signal to warn in time, and that is reported as a miss rather than counted as a save. |
+| **Detection is causal, and the tests enforce it** | The detector walks forward and reports the first day the evidence would genuinely have been sufficient. | An earlier version fitted the trend across the whole series and then quoted an early onset, which inflated lead times to 54 days. That was lookahead. A test now fails the build if detection uses future data. |
+| **The failure signature is divergence, not increase** | A corroding neutral pushes consumers on the heavy phase down and consumers on the light phase up. Testing only for a rising impedance sees half the signal, and on a lateral with one consumer either side the two halves cancel exactly. Measuring distance from baseline instead took segment detection from 2 of 3 to 3 of 3. | Found by inspecting why one asset was missed, not by tuning. The deltas being discarded were as large as 27 standard deviations. |
 | **Faults located in about a second** | 6 of 6 outages detected, 100% precision, 89% recall, roughly 1 second from the first last gasp message. Each one is bracketed between the deepest consumer still lit and the shallowest one dark. | Recall is capped by the 14% of last gasp messages I deliberately drop to model RF collisions. Depth ordering correlates 0.58 with true distance, so the bracket narrows a search, it is not a fix. |
 | **The winding indicator is honestly unusable here** | Busbar referenced winding estimates have day to day scatter larger than their own level, so they are reported as unassessable rather than passed as healthy. | A real gap, not a feature. I tried the fix, peer referencing against neighbouring transformers, and it did not rescue it. See [methods that lost](#methods-that-lost). |
 | **Timestamp drift is the biggest threat, and it is solved** | One meter in five stamped up to two intervals out drops joint accuracy from 100% to 65.8%, the worst degradation of any stress tested. Aligning each meter against transformer busbar telemetry recovers 97 of 97 and 194 of 194 injected offsets exactly, with zero false shifts, and restores 100%. | The busbar is assumed to be on a trustworthy clock. That holds for a grid tied instrument with a maintained time source, and would need checking per deployment. |
 | **Day ahead forecasts beat the free baselines by 13%** | 36 per phase models, mean 13.4% MAE reduction against the best of yesterday, last week and hourly climatology. 34 of 36 phases beat it. Normalised MAE 4.3%. | The irradiance input is a purchased forecast, modelled with 18% day level error, not the true generation. Feeding it the truth would inflate every number here. |
 | **Deferrable consumers are found at 5x the base rate** | Agricultural pumping scores 0.99 on the flexibility proxy against 0.14 for domestic, from load shape alone. The top quintile is 57% agricultural against an 11% base rate. | A proxy, not a survey. It identifies load that *looks* shiftable; whether the customer agrees to shift it is a tariff and consent question this does not touch. |
+| **Demand response stops working as solar rises, and the sweep shows where** | Holding the network, the consumers, the demand and the seed fixed and raising only rooftop PV from 22% to 80%: reverse flow goes from 6.2% of meter-intervals to 26.4%, export constraints from 0 to 179, and the share of predicted constraints that demand response alone can clear falls from 82.5% to 30%. | The power flow does not model inverter over-voltage trip, so the highest voltages in that sweep are an upper bound. In reality the inverters disconnect first and the customer loses the generation instead. Same failure, different symptom. |
 
 ## How the topology learner works
 
@@ -154,6 +157,8 @@ The statistic accumulates slow seasonal drift that has nothing to do with asset 
 
 **Excluding daylight hours to dodge PV.** Distributed PV imposes a shared irradiance signature on every generating meter regardless of topology, and dropping generating hours is the published remedy. Common mode removal already handles it here, so the filter costs a third of the day for nothing.
 
+The segment detector's operating point was also chosen by sweep rather than by hand, and the sweep is recorded in the source next to the constants it sets. Only one setting flags all three assets with no false alarms, and the honest cost of that setting is that one of the three is flagged after it would already have failed.
+
 ## The five pillars
 
 | | Pillar | What it produces |
@@ -181,7 +186,8 @@ backend/entitygrid/
   health/           pillar 2, features, trend test, segment test, cusum, benchmark
   faultloc/         pillar 3, depth estimation, event grouping, localisation
   voltvar/          pillar 4, excursion detection, volt var allocation
-  flex/             pillar 5, forecasting, headroom, demand response, storage
+  flex/             pillar 5, forecasting, headroom, demand response, storage,
+                    and the rising solar scenario sweep
   api/main.py       FastAPI, JSON endpoints and both pages
 backend/tests/      20 tests, including guards on the central claims
 frontend/
@@ -197,6 +203,8 @@ The whole month solves at once. The sweeps loop over nodes, which number in the 
 
 Health is a trend test, not a classifier. No utility has a labelled history of transformer failures, so supervised learning is not available in the field. Every indicator is an impedance in ohms that a distribution engineer can argue with.
 
+Nothing in the console is a number without a comparison. Every accuracy figure carries the baseline it beat, every detector carries the alternatives it was measured against, and the two methods that lost are on screen next to the one that shipped.
+
 ## Known limitations
 
 Better you read these from me than find them yourself.
@@ -209,8 +217,10 @@ Better you read these from me than find them yourself.
 | | **Electrical depth is approximate** | Within transformer rank correlation against true distance has a median of 0.58 and a minimum below zero. The fault bracket narrows the search. It does not point at a pole. |
 | | **Missing reads are modelled as random** | Real head ends lose data in correlated bursts, by feeder or by collector. Uniform random blanking is the easier version of that problem. |
 | | **One network, one seed** | Twelve transformers and 486 consumers, generated from a single seed. The stress benchmark varies drift, PV penetration, missing rate and window length, but not network topology or consumer mix. |
-| | **Two of the three degradations are caught, not all three** | The missed one sits behind a lateral with two consumers on it, on a ninety day baseline. Causal detection gives leads of three to five days, not the nine I first measured; that earlier figure came from fitting the trend over the whole series and then quoting an early onset, which is lookahead. Fixed, and the test suite now fails if detection uses future data. |
-| | **No thermal or export breach occurs at 22% PV** | The thermal and reverse flow constraint paths are exercised by per phase forecasts, but at present penetration the network never actually breaches an export limit. Those paths are implemented and tested, not demonstrated on a real breach. |
+| | **One of three degradations is found too late to act on** | All three are flagged and no healthy asset is. Two arrive three and five days before failure; the third arrives four days after. It sits behind a lateral with two consumers on it, which is not enough signal to warn in time with this method. |
+| | **Winding degradation is never demonstrated** | All three modelled failures are neutral joints. The winding indicator runs and is correctly reported as unassessable on this data, but nothing here shows it catching a winding fault, because there is not one to catch. |
+| | **No export breach occurs at today's 22% PV** | The thermal and reverse flow paths fire in the forecast, but the network only actually breaches an export limit once penetration is raised. The scenario sweep exists so that is demonstrated rather than asserted, and the 22% row honestly reads zero. |
+| | **Inverter over-voltage trip is not modelled** | At high penetration the solved voltages exceed the point where a real inverter would disconnect, so those figures are an upper bound on a quantity that would not physically be reached. |
 
 ## Acknowledgements
 

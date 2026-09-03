@@ -8,17 +8,24 @@ Every feature here is an estimated impedance or an imbalance ratio in real
 units, which means an engineer can argue with it. That matters more than a
 fractionally better score from something unexplainable.
 
-Two impedances are tracked separately because they fail differently:
+Three impedances are tracked separately because they fail differently:
 
 ``tx_impedance``
     Estimated from how far the *busbar* sags, relative to the other
     transformers on the same MV feeder, per amp drawn. Rises when the winding
-    or tap changer is deteriorating.
+    or tap changer is deteriorating. On a feeder whose MV source drifts this
+    estimate is too noisy to alarm on, and :mod:`entitygrid.health.assess`
+    reports it as unassessable rather than passing it as healthy.
 
 ``feeder_impedance``
     Estimated from how far the *meters* sag below their own busbar, per amp.
-    Rises when a joint on the LV backbone is corroding. Invisible to the
+    Rises when a phase conductor or its terminations degrade. Invisible to the
     busbar, and therefore invisible to every DT-meter-only scheme.
+
+``neutral_impedance``
+    Measured as neutral-point displacement: the spread between the three phase
+    voltages, per amp of residual current. This is the one that moves when a
+    neutral joint corrodes, which is the most common LV failure precursor.
 """
 
 from __future__ import annotations

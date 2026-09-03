@@ -52,7 +52,8 @@ INDICATORS = ("neutral_impedance", "feeder_impedance")
 def _score(detections: dict[str, int], failure_day: dict[str, int]) -> dict:
     """Turn a mapping of transformer to detection day into scored outcomes."""
     degrading = set(failure_day)
-    detected, false_alarms, leads, implausible = set(), set(), [], 0
+    detected, false_alarms, leads = set(), set(), []
+    too_early, too_late = 0, 0
 
     for dt_id, day in detections.items():
         if dt_id not in degrading:
@@ -62,14 +63,21 @@ def _score(detections: dict[str, int], failure_day: dict[str, int]) -> dict:
         if 0 <= lead <= MAX_PLAUSIBLE_LEAD_DAYS:
             detected.add(dt_id)
             leads.append(lead)
+        elif lead < 0:
+            # The asset was found, but only after it would already have failed.
+            # Useful for a post-mortem, useless as a warning.
+            too_late += 1
         else:
-            implausible += 1
+            # Fired so far ahead of the degradation that it cannot be reacting
+            # to it. That is drift being read as a finding.
+            too_early += 1
 
     return {
-        "detected": len(detected),
+        "detected_in_time": len(detected),
         "of_degrading": len(degrading),
         "false_alarms": len(false_alarms),
-        "implausible_timing": implausible,
+        "found_too_late": too_late,
+        "fired_too_early": too_early,
         "mean_lead_days": float(np.mean(leads)) if leads else float("nan"),
         "min_lead_days": float(np.min(leads)) if leads else float("nan"),
     }
@@ -132,9 +140,11 @@ def main() -> None:
     print("=" * 84)
     print(frame.to_string(index=False))
     print("=" * 84)
-    print("Detections landing more than "
-          f"{MAX_PLAUSIBLE_LEAD_DAYS} days before failure are counted as "
-          "implausible timing, not as early warnings.")
+    print("A detection only counts if it lands between zero and "
+          f"{MAX_PLAUSIBLE_LEAD_DAYS} days before failure. Found too late means "
+          "the asset was flagged after it would already have failed; fired too "
+          "early means the detector cannot have been reacting to the "
+          "degradation at all.")
 
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     frame.to_csv(PROCESSED_DIR / "detector_benchmark.csv", index=False)
