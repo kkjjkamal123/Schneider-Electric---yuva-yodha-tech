@@ -202,8 +202,7 @@ def bullets(s, x, y, w, items, gap=Inches(0.86)):
 def build(d: dict) -> Presentation:
     r = d["results"]
     sc = r["scorecard"]
-    topo, health, faults, volt = (sc["topology"], sc["health"], sc["faults"],
-                                  sc["voltage"])
+    topo, health, faults = sc["topology"], sc["health"], sc["faults"]
     flex = sc["flexibility"]
     meta = r["meta"]
     pv = d["pv_scenarios"]
