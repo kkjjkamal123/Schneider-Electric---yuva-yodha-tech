@@ -36,6 +36,7 @@ is really making.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -84,11 +85,8 @@ def analyse(penetration: float, base: SimConfig, out_dir: Path) -> dict:
 
     storage = []
     for dt_id in sorted({w.dt_id for w in constraints}):
-        key = next((k for k in forecasts if split_key(k)[0] == dt_id), None)
-        if key is None:
-            continue
-        plan = size_storage(dt_id, forecasts[key], constraints,
-                            float(ratings.get(dt_id, 0.0)),
+        phases = [r for k, r in forecasts.items() if split_key(k)[0] == dt_id]
+        plan = size_storage(dt_id, phases, constraints,
                             interval_minutes=ds.interval_minutes)
         if plan is not None:
             storage.append(plan)
@@ -121,8 +119,13 @@ def analyse(penetration: float, base: SimConfig, out_dir: Path) -> dict:
 def run(base: SimConfig | None = None,
         penetrations: tuple[float, ...] = PENETRATIONS) -> pd.DataFrame:
     base = base or SimConfig()
+    # Each penetration writes a full ~48 MB dataset. Without the cleanup the
+    # sweep leaves a couple of hundred megabytes behind on every run.
     root = Path(tempfile.mkdtemp(prefix="entitygrid-pv-"))
-    rows = [analyse(p, base, root / f"pv{int(p * 100)}") for p in penetrations]
+    try:
+        rows = [analyse(p, base, root / f"pv{int(p * 100)}") for p in penetrations]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
     return pd.DataFrame(rows)
 
 

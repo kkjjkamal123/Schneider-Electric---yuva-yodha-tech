@@ -41,7 +41,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from entitygrid.flex.forecast import split_key
+from entitygrid.flex.forecast import common_index, on_index, split_key
 from entitygrid.voltvar.controller import LOWER_LIMIT_V, UPPER_LIMIT_V
 
 # Transformers tolerate short excursions above nameplate, so a breach only
@@ -204,11 +204,14 @@ def predict_constraints(forecasts: dict, ratings: pd.Series,
         if model is None or model.r2 < MIN_VOLTAGE_R2 or len(phases) < 3:
             continue
 
-        reference = next(iter(phases.values()))
-        stamps = reference.timestamps
-        span = len(stamps)
+        # Each phase is fitted independently and can land on a different test
+        # split, so the three are aligned on the instants they all cover.
+        # Truncating by index instead would sum three different moments.
+        stamps = common_index(phases.values())
+        if len(stamps) == 0:
+            continue
         loads = np.column_stack([
-            phases[p].predicted[:span] if p in phases else np.zeros(span)
+            on_index(phases[p], stamps) if p in phases else np.zeros(len(stamps))
             for p in range(3)])
         volts = model.predict(loads)
         worst_phase = model.worst_phase
@@ -246,6 +249,10 @@ def predict_constraints(forecasts: dict, ratings: pd.Series,
 
 def model_quality(models: dict[str, VoltageModel]) -> pd.DataFrame:
     """Fit quality per transformer, so a weak model is visible not hidden."""
+    columns = ["dt_id", "r2", "residual_v", "worst_phase",
+               "sensitivity_v_per_kw", "trusted"]
+    if not models:
+        return pd.DataFrame(columns=columns)
     return pd.DataFrame([{
         "dt_id": m.dt_id, "r2": m.r2, "residual_v": m.residual_std,
         "worst_phase": "RYB"[m.worst_phase],

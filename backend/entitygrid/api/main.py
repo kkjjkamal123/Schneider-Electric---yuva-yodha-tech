@@ -70,7 +70,7 @@ def _clean(frame: pd.DataFrame) -> list[dict]:
 def status() -> dict:
     payload = results()
     return {"status": "ok", "meta": payload["meta"],
-            "pillars": ["topology", "health", "faults", "voltage"]}
+            "pillars": ["topology", "health", "faults", "voltage", "flexibility"]}
 
 
 @app.get("/api/scorecard")

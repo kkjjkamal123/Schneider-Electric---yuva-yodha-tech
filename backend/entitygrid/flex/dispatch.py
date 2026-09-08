@@ -37,6 +37,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from entitygrid.flex.forecast import common_index, on_index
+
 # Fraction of a flexible consumer's load that can realistically be moved.
 # Deferring a pump cycle is easy; nobody gives up their evening lighting.
 MAX_SHIFT_FRACTION = 0.75
@@ -220,7 +222,7 @@ def plan_demand_response(window, flex: pd.DataFrame, assignments: pd.DataFrame,
                      f"reconfiguration needed")))
 
 
-def size_storage(dt_id: str, forecast, windows: list, rating_kva: float,
+def size_storage(dt_id: str, forecasts: list, windows: list,
                  interval_minutes: int = 15) -> StoragePlan | None:
     """Size a community battery from the forecast rather than a rule of thumb.
 
@@ -229,9 +231,13 @@ def size_storage(dt_id: str, forecast, windows: list, rating_kva: float,
     storage of a one hour breach at the same power. Charging is assumed to come
     from the midday export the same feeder is already spilling, which is what
     makes the battery worth siting here rather than anywhere else.
+
+    ``forecasts`` is every per-phase forecast belonging to this transformer. A
+    battery at the busbar sees all three phases, so the export it can absorb and
+    the peak it can shave are the transformer totals, not one arbitrary phase's.
     """
     relevant = [w for w in windows if w.dt_id == dt_id]
-    if not relevant:
+    if not relevant or not forecasts:
         return None
 
     hours = interval_minutes / 60.0
@@ -239,7 +245,12 @@ def size_storage(dt_id: str, forecast, windows: list, rating_kva: float,
     energy_kwh = max(w.energy_deficit_kwh for w in relevant)
     energy_kwh = energy_kwh / (STORAGE_EFFICIENCY * STORAGE_USABLE_FRACTION)
 
-    predicted = forecast.predicted
+    # Sum the phases at the instants they all cover. Splits can differ, and
+    # adding them by index would total three different moments.
+    stamps = common_index(forecasts)
+    if len(stamps) == 0:
+        return None
+    predicted = np.sum([on_index(f, stamps) for f in forecasts], axis=0)
     export = np.clip(-predicted, 0.0, None)
     export_energy = float(export.sum() * hours)
     days = max(1.0, len(predicted) * hours / 24.0)

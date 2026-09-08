@@ -96,7 +96,6 @@ def find_excursions(voltage: np.ndarray, meter_ids: np.ndarray,
             ("overvoltage", worst_high, worst_high > UPPER_LIMIT_V),
             ("undervoltage", worst_low, worst_low < LOWER_LIMIT_V),
         ):
-            mask = np.nan_to_num(mask, nan=False).astype(bool)
             if not mask.any():
                 continue
 

@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from entitygrid.io import LOCAL_TZ
+
 MIN_CURRENT_A = 5.0
 # Messages this close together belong to the same event. Comfortably wider than
 # the last-gasp delivery jitter, narrower than any plausible gap between faults.
@@ -134,7 +136,13 @@ def group_events(last_gasp: pd.DataFrame, assignments: pd.DataFrame,
         return []
 
     messages = last_gasp.copy()
-    messages["received_at"] = pd.to_datetime(messages["received_at"], utc=True)
+    # io.load_dataset already parses this column into the local zone. Re-parsing
+    # with utc=True would hand the rest of the system fault times in UTC while
+    # every other timestamp it shows is local.
+    received = messages["received_at"]
+    if not isinstance(received.dtype, pd.DatetimeTZDtype):
+        messages["received_at"] = pd.to_datetime(
+            received, utc=True).dt.tz_convert(LOCAL_TZ)
     lookup = assignments.set_index("meter_id")[["inferred_dt_id", "inferred_phase"]]
     messages = messages.join(lookup, on="meter_id")
     messages = messages.dropna(subset=["inferred_dt_id"])

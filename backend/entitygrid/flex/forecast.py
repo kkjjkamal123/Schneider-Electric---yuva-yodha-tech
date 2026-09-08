@@ -35,7 +35,8 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 
-# Lags available at forecast time for any horizon inside a day.
+# Default lag horizon, in intervals: one day of 15-minute data. Callers that
+# run on a different metering interval pass their own ``steps_per_day``.
 DAY = 96
 WEEK = 7 * DAY
 TRAIN_FRACTION = 0.7
@@ -82,6 +83,27 @@ def aggregate_to_phase(net_p_kw: np.ndarray, meter_ids: np.ndarray,
     return pd.DataFrame(columns)
 
 
+def common_index(results) -> pd.DatetimeIndex:
+    """Instants every one of these forecasts covers.
+
+    Each phase is fitted on its own usable mask, so the three test splits of one
+    transformer need not start or end together. Anything that combines them has
+    to line them up by instant; truncating by position would add three different
+    moments together.
+    """
+    shared = None
+    for result in results:
+        shared = (result.timestamps if shared is None
+                  else shared.intersection(result.timestamps))
+    return pd.DatetimeIndex([]) if shared is None else shared.sort_values()
+
+
+def on_index(result: ForecastResult, stamps: pd.DatetimeIndex) -> np.ndarray:
+    """One forecast's predictions read off at ``stamps``."""
+    return (pd.Series(result.predicted, index=result.timestamps)
+            .reindex(stamps).to_numpy())
+
+
 def split_key(key: str) -> tuple[str, int]:
     """Split a ``DT07|1`` column name back into transformer and phase."""
     dt_id, phase = key.rsplit("|", 1)
@@ -114,8 +136,10 @@ def pv_day_ahead_forecast(solar_kw: np.ndarray, steps_per_day: int,
 
 
 def _features(series: np.ndarray, timestamps: pd.DatetimeIndex,
-              pv_forecast: np.ndarray | None = None) -> pd.DataFrame:
+              pv_forecast: np.ndarray | None = None,
+              steps_per_day: int = DAY) -> pd.DataFrame:
     """Calendar and lag features, all knowable a day in advance."""
+    day, week = steps_per_day, 7 * steps_per_day
     s = pd.Series(series)
     hour = timestamps.hour.to_numpy() + timestamps.minute.to_numpy() / 60.0
     extra = {}
@@ -123,7 +147,7 @@ def _features(series: np.ndarray, timestamps: pd.DatetimeIndex,
         pv = pd.Series(pv_forecast)
         extra = {
             "pv_forecast": pv_forecast,
-            "pv_forecast_day": pv.rolling(DAY, min_periods=1).mean().to_numpy(),
+            "pv_forecast_day": pv.rolling(day, min_periods=1).mean().to_numpy(),
         }
     return pd.DataFrame({
         **extra,
@@ -132,13 +156,13 @@ def _features(series: np.ndarray, timestamps: pd.DatetimeIndex,
         "cos_day": np.cos(2 * np.pi * hour / 24.0),
         "dayofweek": timestamps.dayofweek.to_numpy(),
         "is_weekend": (timestamps.dayofweek.to_numpy() >= 5).astype(int),
-        "lag_day": s.shift(DAY).to_numpy(),
-        "lag_2day": s.shift(2 * DAY).to_numpy(),
-        "lag_week": s.shift(WEEK).to_numpy(),
+        "lag_day": s.shift(day).to_numpy(),
+        "lag_2day": s.shift(2 * day).to_numpy(),
+        "lag_week": s.shift(week).to_numpy(),
         # Yesterday's shape around the same time, which carries weather.
-        "lag_day_mean": s.shift(DAY).rolling(DAY).mean().to_numpy(),
-        "lag_day_max": s.shift(DAY).rolling(DAY).max().to_numpy(),
-        "lag_day_min": s.shift(DAY).rolling(DAY).min().to_numpy(),
+        "lag_day_mean": s.shift(day).rolling(day).mean().to_numpy(),
+        "lag_day_max": s.shift(day).rolling(day).max().to_numpy(),
+        "lag_day_min": s.shift(day).rolling(day).min().to_numpy(),
     })
 
 
@@ -154,17 +178,18 @@ def _metrics(actual: np.ndarray, predicted: np.ndarray) -> tuple[float, float]:
 
 def forecast_transformer(series: np.ndarray, timestamps: pd.DatetimeIndex,
                          dt_id: str,
-                         pv_forecast: np.ndarray | None = None) -> ForecastResult | None:
+                         pv_forecast: np.ndarray | None = None,
+                         steps_per_day: int = DAY) -> ForecastResult | None:
     """Fit and evaluate a day-ahead forecaster for one transformer."""
-    features = _features(series, timestamps, pv_forecast)
+    features = _features(series, timestamps, pv_forecast, steps_per_day)
     usable = features.notna().all(axis=1).to_numpy() & np.isfinite(series)
-    if usable.sum() < 4 * DAY:
+    if usable.sum() < 4 * steps_per_day:
         return None
 
     idx = np.where(usable)[0]
     split = int(len(idx) * TRAIN_FRACTION)
     train, test = idx[:split], idx[split:]
-    if len(test) < DAY:
+    if len(test) < steps_per_day:
         return None
 
     model = HistGradientBoostingRegressor(
@@ -175,17 +200,14 @@ def forecast_transformer(series: np.ndarray, timestamps: pd.DatetimeIndex,
     actual = series[test]
 
     # Baselines a utility already has, for free.
+    # Hour-of-day climatology is fitted on the train split and read off at the
+    # test hours, so the baseline never sees the period it is scored on.
+    hourly = pd.Series(series[train]).groupby(timestamps[train].hour).mean()
     baselines = {
         "yesterday": features["lag_day"].to_numpy()[test],
         "last week": features["lag_week"].to_numpy()[test],
-        "hour-of-day mean": pd.Series(series[train]).groupby(
-            timestamps[train].hour).transform("mean").reindex(
-            range(len(train))).to_numpy(),
+        "hour-of-day mean": hourly.reindex(timestamps[test].hour).to_numpy(),
     }
-    # Hour-of-day climatology, evaluated properly on the test index.
-    hourly = pd.Series(series[train]).groupby(timestamps[train].hour).mean()
-    baselines["hour-of-day mean"] = hourly.reindex(
-        timestamps[test].hour).to_numpy()
 
     mae, nmae = _metrics(actual, predicted)
     metrics = {"mae_kw": mae, "nmae_pct": nmae, "n_test": int(len(test))}
@@ -223,7 +245,8 @@ def forecast_all(net_p_kw: np.ndarray, meter_ids: np.ndarray,
             pv = pv_day_ahead_forecast(pv_frame[dt_id].to_numpy(),
                                        steps_per_day, seed=seed)
         result = forecast_transformer(frame[dt_id].to_numpy(), timestamps,
-                                      dt_id, pv_forecast=pv)
+                                      dt_id, pv_forecast=pv,
+                                      steps_per_day=steps_per_day)
         if result is not None:
             out[dt_id] = result
     return out

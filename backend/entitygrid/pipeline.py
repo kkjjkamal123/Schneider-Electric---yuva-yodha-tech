@@ -42,13 +42,14 @@ from entitygrid.voltvar.controller import find_excursions, volt_var_response
 
 def _json_safe(value):
     """Make numpy / pandas scalars serialisable, and infinities finite."""
-    if isinstance(value, (np.integer,)):
+    # bool first: it is a subclass of int and must not be widened to 0/1.
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    if isinstance(value, (np.integer, int)):
         return int(value)
     if isinstance(value, (np.floating, float)):
         v = float(value)
         return None if not np.isfinite(v) else v
-    if isinstance(value, (np.bool_, bool)):
-        return bool(value)
     if isinstance(value, pd.Timestamp):
         return value.isoformat()
     if isinstance(value, np.ndarray):
@@ -134,11 +135,9 @@ def run(ds: Dataset | None = None, out_dir: Path | None = None) -> dict:
     ]
     storage_plans = []
     for dt_id in sorted({w.dt_id for w in constraints}):
-        key = next((k for k in forecasts if split_key(k)[0] == dt_id), None)
-        if key is None:
-            continue
-        plan = size_storage(dt_id, forecasts[key], constraints,
-                            float(ratings.get(dt_id, 0.0)),
+        # Every phase of this transformer: the battery sits on the busbar.
+        phases = [r for k, r in forecasts.items() if split_key(k)[0] == dt_id]
+        plan = size_storage(dt_id, phases, constraints,
                             interval_minutes=ds.interval_minutes)
         if plan is not None:
             storage_plans.append(plan)
